@@ -1,2 +1,6 @@
 # Claude Code local tooling state (worktrees for background agents, etc.)
 .claude/
+
+# Local env
+.env.local
+.env*.local
