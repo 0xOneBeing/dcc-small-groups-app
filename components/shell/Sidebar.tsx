@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { colors, mono } from "@/lib/tokens";
 import { useAuth } from "@/hooks/useAuth";
+import { notify } from "@/lib/toast";
 import type { RoleGroup } from "@/lib/auth/roleHome";
 
 interface NavItem {
@@ -49,8 +50,14 @@ export function Sidebar({
   const items = NAV[group];
 
   async function signOut() {
-    await logout();
-    router.replace("/sign-in");
+    try {
+      await logout();
+      notify.success("Signed out");
+    } catch (err) {
+      notify.error(err, "Could not sign out cleanly");
+    } finally {
+      router.replace("/sign-in");
+    }
   }
   const initials = userName
     .split(" ")

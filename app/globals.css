@@ -1,3 +1,79 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   shadcn/ui theme tokens (Tailwind v4)
+
+   Only the primitives added so far — table, skeleton, sonner — actually read
+   these, but the full set is defined here so `npx shadcn@latest add <x>` keeps
+   working as the rest of the UI migrates over. Values mirror lib/tokens.ts so
+   shadcn components match the existing red / ink palette.
+   --------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  --background: #f7f8fa;
+  --foreground: #12161c;
+  --card: #ffffff;
+  --card-foreground: #12161c;
+  --popover: #ffffff;
+  --popover-foreground: #12161c;
+  --primary: #b01e28;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f4f7;
+  --secondary-foreground: #12161c;
+  --muted: #f7f8fa;
+  --muted-foreground: #5c6673;
+  --accent: #f2f4f7;
+  --accent-foreground: #12161c;
+  --destructive: #b01e28;
+  --destructive-foreground: #ffffff;
+  --border: #e9ecf1;
+  --input: #e3e7ec;
+  --ring: #b01e28;
+}
+
+/* Tailwind v4 defaults `border-color` to `currentColor`; shadcn primitives
+   expect it to default to the theme border token. Scoped to border-color only
+   so it can't add visible borders where none were set. */
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Existing global styles (pre-Tailwind). Declared after the import so they
+   win over Preflight where they overlap.
+   --------------------------------------------------------------------------- */
 * {
   box-sizing: border-box;
 }

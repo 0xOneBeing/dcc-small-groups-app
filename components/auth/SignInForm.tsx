@@ -6,6 +6,7 @@ import { colors } from "@/lib/tokens";
 import { TextInput, Button } from "@/components/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api/errors";
+import { notify } from "@/lib/toast";
 
 export function SignInForm() {
   const router = useRouter();
@@ -20,18 +21,18 @@ export function SignInForm() {
     setPending(true);
     try {
       await login(identifier.trim(), password);
+      notify.success("Signed in");
       router.replace("/");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(
-          err.fieldError("email") ??
+      const msg =
+        err instanceof ApiError
+          ? err.fieldError("email") ??
             err.fieldError("cell_code") ??
             err.fieldError("password") ??
-            err.message,
-        );
-      } else {
-        setError("Could not sign in. Please try again.");
-      }
+            err.message
+          : "Could not sign in. Please try again.";
+      setError(msg);
+      notify.error(msg);
       setPending(false);
     }
   }
