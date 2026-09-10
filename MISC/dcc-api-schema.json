@@ -94,45 +94,7 @@
                 "description": "Returns the global approval interval in seconds.",
                 "summary": "Get approval deadline settings",
                 "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            },
-            "patch": {
-                "operationId": "v1_approval_settings_partial_update",
-                "description": "Updates the number of seconds before Area or Zone approval is allowed.",
-                "summary": "Update approval deadline settings",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/approvals/queue/": {
-            "get": {
-                "operationId": "v1_approvals_queue_retrieve",
-                "description": "Returns pending reports the authenticated Section, Area, or Zone leader can review.",
-                "summary": "List reports awaiting approval",
-                "tags": [
-                    "v1"
+                    "Approval Settings"
                 ],
                 "security": [
                     {
@@ -144,7 +106,97 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/SundayReport"
+                                    "$ref": "#/components/schemas/ReportApprovalSettings"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "v1_approval_settings_partial_update",
+                "description": "Updates the number of seconds before Area or Zone approval is allowed.",
+                "summary": "Update approval deadline settings",
+                "tags": [
+                    "Approval Settings"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedReportApprovalSettings"
+                            },
+                            "examples": {
+                                "One-dayDeadline": {
+                                    "value": {
+                                        "approval_interval": 86400
+                                    },
+                                    "summary": "One-day deadline"
+                                }
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedReportApprovalSettings"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedReportApprovalSettings"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportApprovalSettings"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/approvals/queue/": {
+            "get": {
+                "operationId": "v1_approvals_queue_list",
+                "description": "Returns pending reports the authenticated Section, Area, or Zone leader can review.",
+                "summary": "List reports awaiting approval",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "A page number within the paginated result set.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "tags": [
+                    "Approval Settings"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedSundayReportList"
                                 }
                             }
                         },
@@ -155,7 +207,7 @@
         },
         "/api/v1/organization/dashboard/": {
             "get": {
-                "operationId": "v1_organization_dashboard_retrieve",
+                "operationId": "v1_organization_dashboard_list",
                 "description": "Returns submission and approval totals for cells under the authenticated leader's scope. Use service_date for a Sunday; the latest Sunday is used when it is omitted.",
                 "summary": "Get compliance summary",
                 "parameters": [
@@ -174,7 +226,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -183,14 +235,50 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ComplianceSummary"
+                                    }
+                                },
+                                "examples": {
+                                    "SummaryResponse": {
+                                        "value": [
+                                            {
+                                                "service_date": "2026-09-06",
+                                                "total_cells": 12,
+                                                "submitted_cells": 10,
+                                                "missing_cells": [],
+                                                "pending_approval": 3,
+                                                "approved": 7,
+                                                "compliance_percentage": 83.33
+                                            }
+                                        ],
+                                        "summary": "Summary response"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
         },
         "/api/v1/organization/dashboard/{unit_type}/{id}/": {
             "get": {
-                "operationId": "v1_organization_dashboard_retrieve_2",
+                "operationId": "v1_organization_dashboard_retrieve",
                 "description": "Returns compliance for a region, district, zone, area, section, or cell. Leaders can only request their own level or descendants.",
                 "summary": "Drill into a hierarchy unit",
                 "parameters": [
@@ -201,6 +289,15 @@
                             "type": "string",
                             "format": "uuid"
                         },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "pk",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "UUID of the organization unit.",
                         "required": true
                     },
                     {
@@ -215,13 +312,22 @@
                         "in": "path",
                         "name": "unit_type",
                         "schema": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                                "area",
+                                "cell",
+                                "district",
+                                "region",
+                                "section",
+                                "zone"
+                            ]
                         },
+                        "description": "Organization level to inspect.",
                         "required": true
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -230,7 +336,44 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ComplianceScope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -241,7 +384,7 @@
                 "description": "Returns pending reports the authenticated approver can act on, including submission time, waiting duration, and overdue status.",
                 "summary": "View approval waiting times",
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -250,7 +393,30 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {},
+                                    "description": "Unspecified response body"
+                                },
+                                "examples": {
+                                    "ApprovalResponse": {
+                                        "value": [
+                                            {
+                                                "id": "report-uuid",
+                                                "cell": "Test Cell",
+                                                "submitted_at": "2026-09-06T12:00:00Z",
+                                                "waiting_seconds": 90000,
+                                                "overdue": true
+                                            }
+                                        ],
+                                        "summary": "Approval response"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -291,7 +457,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -300,7 +466,25 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        },
+                        "description": "CSV file with cell report statuses."
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -329,7 +513,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -338,14 +522,33 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {},
+                                    "description": "Unspecified response body"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
         },
         "/api/v1/organization/dashboard/trends/": {
             "get": {
-                "operationId": "v1_organization_dashboard_trends_retrieve",
+                "operationId": "v1_organization_dashboard_trends_list",
                 "description": "Returns one compliance summary for each Sunday in the selected period.",
                 "summary": "Get compliance trends",
                 "parameters": [
@@ -364,7 +567,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Organization"
                 ],
                 "security": [
                     {
@@ -373,7 +576,27 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ComplianceSummary"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -394,7 +617,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Reports"
                 ],
                 "security": [
                     {
@@ -419,7 +642,7 @@
                 "description": "Creates one report for the authenticated Cell Leader's assigned cell. The service date must be a Sunday and the new report starts with PENDING approval status.",
                 "summary": "Submit a Sunday report",
                 "tags": [
-                    "v1"
+                    "Reports"
                 ],
                 "requestBody": {
                     "content": {
@@ -469,6 +692,36 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -489,7 +742,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Reports"
                 ],
                 "security": [
                     {
@@ -525,7 +778,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Reports"
                 ],
                 "requestBody": {
                     "content": {
@@ -557,6 +810,26 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/SundayReport"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
@@ -582,27 +855,26 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Approval Settings"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             }
                         }
-                    },
-                    "required": true
+                    }
                 },
                 "security": [
                     {
@@ -615,6 +887,16 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/SundayReport"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
@@ -640,13 +922,13 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Approval Settings"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             },
                             "examples": {
                                 "RejectionComment": {
@@ -659,16 +941,15 @@
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/SundayReport"
+                                "$ref": "#/components/schemas/ReportDecision"
                             }
                         }
-                    },
-                    "required": true
+                    }
                 },
                 "security": [
                     {
@@ -685,17 +966,38 @@
                             }
                         },
                         "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
         },
         "/api/v1/reports/mine/": {
             "get": {
-                "operationId": "v1_reports_mine_retrieve",
+                "operationId": "v1_reports_mine_list",
                 "description": "Returns reports submitted by the authenticated Cell Leader and their approval statuses.",
                 "summary": "List my report history",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "A page number within the paginated result set.",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
                 "tags": [
-                    "v1"
+                    "Reports"
                 ],
                 "security": [
                     {
@@ -707,7 +1009,97 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/SundayReport"
+                                    "$ref": "#/components/schemas/PaginatedSundayReportList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/reports/whatsapp/": {
+            "post": {
+                "operationId": "v1_reports_whatsapp_create",
+                "description": "Creates one report for the authenticated Cell Leader's assigned cell using cell_code from the request body. The service date must be a Sunday and the new report starts with PENDING approval status.",
+                "summary": "Submit a Sunday report via WhatsApp",
+                "tags": [
+                    "Reports"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WhatsAppSundayReport"
+                            },
+                            "examples": {
+                                "Submission": {
+                                    "value": {
+                                        "cell_code": "CELL-001",
+                                        "service_date": "2026-09-06",
+                                        "meeting_held": true,
+                                        "members_present": 10,
+                                        "guests_cards": 2,
+                                        "decisions_card": 1,
+                                        "comment": "Normal Sunday service"
+                                    }
+                                }
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WhatsAppSundayReport"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WhatsAppSundayReport"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WhatsAppSundayReport"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
@@ -731,7 +1123,7 @@
                     }
                 ],
                 "tags": [
-                    "v1"
+                    "Roles"
                 ],
                 "security": [
                     {
@@ -750,27 +1142,89 @@
                         "description": ""
                     }
                 }
-            },
+            }
+        },
+        "/api/v1/user/complete-profile/": {
             "post": {
-                "operationId": "v1_roles_create",
+                "operationId": "v1_user_complete_profile_create",
+                "description": "Set the final user profile values and password using a valid magic link token.",
+                "summary": "Complete profile onboarding",
                 "tags": [
-                    "v1"
+                    "Auth"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/CompleteProfile"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/CompleteProfile"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/CompleteProfile"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/user/invite/": {
+            "post": {
+                "operationId": "v1_user_invite_create",
+                "description": "Create an invite for a new leader and assign them to a hierarchy unit.",
+                "summary": "Invite a user",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/InviteUser"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/InviteUser"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/InviteUser"
                             }
                         }
                     },
@@ -786,7 +1240,17 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserRole"
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
@@ -795,74 +1259,114 @@
                 }
             }
         },
-        "/api/v1/roles/{id}/": {
-            "get": {
-                "operationId": "v1_roles_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "description": "A UUID string identifying this user role.",
-                        "required": true
-                    }
-                ],
+        "/api/v1/user/login/": {
+            "post": {
+                "operationId": "v1_user_login_create",
+                "description": "Authenticate a user with email and password and return a JWT access and refresh token pair.",
+                "summary": "Login",
                 "tags": [
-                    "v1"
+                    "Auth"
                 ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Login"
+                            },
+                            "examples": {
+                                "LoginRequest": {
+                                    "value": {
+                                        "email": "leader@example.com",
+                                        "password": "StrongPass123"
+                                    },
+                                    "summary": "Login request"
+                                }
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Login"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Login"
+                            }
+                        }
+                    },
+                    "required": true
+                },
                 "security": [
                     {
                         "jwtAuth": []
-                    }
+                    },
+                    {}
                 ],
                 "responses": {
                     "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserRole"
+                                    "$ref": "#/components/schemas/LoginResponse"
+                                },
+                                "examples": {
+                                    "LoginResponse": {
+                                        "value": {
+                                            "message": "Login successful.",
+                                            "user": {
+                                                "id": "uuid",
+                                                "email": "leader@example.com",
+                                                "first_name": "John",
+                                                "last_name": "Doe",
+                                                "tokens": {
+                                                    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+                                                    "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+                                                }
+                                            }
+                                        },
+                                        "summary": "Login response"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
                         "description": ""
                     }
                 }
-            },
-            "put": {
-                "operationId": "v1_roles_update",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "description": "A UUID string identifying this user role.",
-                        "required": true
-                    }
-                ],
+            }
+        },
+        "/api/v1/user/logout/": {
+            "post": {
+                "operationId": "v1_user_logout_create",
+                "description": "Invalidate a refresh token to log the user out.",
+                "summary": "Logout",
                 "tags": [
-                    "v1"
+                    "Auth"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/Logout"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/Logout"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserRole"
+                                "$ref": "#/components/schemas/Logout"
                             }
                         }
                     },
@@ -878,49 +1382,168 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserRole"
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
                                 }
                             }
                         },
                         "description": ""
                     }
                 }
-            },
-            "patch": {
-                "operationId": "v1_roles_partial_update",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
-                        },
-                        "description": "A UUID string identifying this user role.",
-                        "required": true
-                    }
-                ],
+            }
+        },
+        "/api/v1/user/password-reset/": {
+            "post": {
+                "operationId": "v1_user_password_reset_create",
+                "description": "Send a password reset link to a registered user email if the account exists.",
+                "summary": "Request password reset",
                 "tags": [
-                    "v1"
+                    "Auth"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserRole"
+                                "$ref": "#/components/schemas/PasswordResetRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserRole"
+                                "$ref": "#/components/schemas/PasswordResetRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserRole"
+                                "$ref": "#/components/schemas/PasswordResetRequest"
                             }
                         }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
+                }
+            }
+        },
+        "/api/v1/user/password-reset/confirm/": {
+            "post": {
+                "operationId": "v1_user_password_reset_confirm_create",
+                "description": "Reset the user's password using the token and UID sent in the reset email.",
+                "summary": "Confirm password reset",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirm"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirm"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PasswordResetConfirm"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/user/refresh/": {
+            "post": {
+                "operationId": "v1_user_refresh_create",
+                "description": "Exchange a valid refresh token for a new access token.",
+                "summary": "Refresh token",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshToken"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshToken"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshToken"
+                            }
+                        }
+                    },
+                    "required": true
                 },
                 "security": [
                     {
@@ -932,194 +1555,21 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserRole"
+                                    "$ref": "#/components/schemas/TokenResponse"
                                 }
                             }
                         },
                         "description": ""
-                    }
-                }
-            },
-            "delete": {
-                "operationId": "v1_roles_destroy",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "string",
-                            "format": "uuid"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MessageResponse"
+                                }
+                            }
                         },
-                        "description": "A UUID string identifying this user role.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/complete-profile/": {
-            "post": {
-                "operationId": "v1_user_complete_profile_create",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/invite/": {
-            "post": {
-                "operationId": "v1_user_invite_create",
-                "description": "Invite a new user.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/login/": {
-            "post": {
-                "operationId": "v1_user_login_create",
-                "description": "Authenticate a user and return JWT tokens.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/logout/": {
-            "post": {
-                "operationId": "v1_user_logout_create",
-                "description": "Logout the user by blacklisting the refresh token.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/password-reset/": {
-            "post": {
-                "operationId": "v1_user_password_reset_create",
-                "description": "Request a password reset.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/password-reset/confirm/": {
-            "post": {
-                "operationId": "v1_user_password_reset_confirm_create",
-                "description": "Reset the user's password.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/refresh/": {
-            "post": {
-                "operationId": "v1_user_refresh_create",
-                "description": "Refresh the access token.",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
-                    }
-                }
-            }
-        },
-        "/api/v1/user/verify-magic-link/": {
-            "post": {
-                "operationId": "v1_user_verify_magic_link_create",
-                "tags": [
-                    "v1"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "description": "No response body"
+                        "description": ""
                     }
                 }
             }
@@ -1136,6 +1586,216 @@
                 ],
                 "type": "string",
                 "description": "* `PENDING` - PENDING\n* `APPROVED` - APPROVED\n* `REJECTED` - REJECTED\n* `DELETED` - DELETED"
+            },
+            "CompleteProfile": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string"
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 8
+                    },
+                    "password_confirmation": {
+                        "type": "string",
+                        "writeOnly": true
+                    }
+                },
+                "required": [
+                    "password",
+                    "password_confirmation",
+                    "token"
+                ]
+            },
+            "ComplianceScope": {
+                "type": "object",
+                "properties": {
+                    "service_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "total_cells": {
+                        "type": "integer"
+                    },
+                    "submitted_cells": {
+                        "type": "integer"
+                    },
+                    "missing_cells": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "pending_approval": {
+                        "type": "integer"
+                    },
+                    "approved": {
+                        "type": "integer"
+                    },
+                    "compliance_percentage": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "scope": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "approved",
+                    "compliance_percentage",
+                    "missing_cells",
+                    "pending_approval",
+                    "scope",
+                    "service_date",
+                    "submitted_cells",
+                    "total_cells"
+                ]
+            },
+            "ComplianceSummary": {
+                "type": "object",
+                "properties": {
+                    "service_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "total_cells": {
+                        "type": "integer"
+                    },
+                    "submitted_cells": {
+                        "type": "integer"
+                    },
+                    "missing_cells": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "pending_approval": {
+                        "type": "integer"
+                    },
+                    "approved": {
+                        "type": "integer"
+                    },
+                    "compliance_percentage": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "approved",
+                    "compliance_percentage",
+                    "missing_cells",
+                    "pending_approval",
+                    "service_date",
+                    "submitted_cells",
+                    "total_cells"
+                ]
+            },
+            "InviteUser": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "role_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "organization_unit_type": {
+                        "$ref": "#/components/schemas/OrganizationUnitTypeEnum"
+                    },
+                    "organization_unit_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "email",
+                    "organization_unit_id",
+                    "organization_unit_type",
+                    "role_id"
+                ]
+            },
+            "Login": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ]
+            },
+            "LoginResponse": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    },
+                    "access": {
+                        "type": "string"
+                    },
+                    "refresh": {
+                        "type": "string"
+                    },
+                    "user": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "access",
+                    "message",
+                    "refresh",
+                    "user"
+                ]
+            },
+            "Logout": {
+                "type": "object",
+                "properties": {
+                    "refresh": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "refresh"
+                ]
+            },
+            "MessageResponse": {
+                "type": "object",
+                "properties": {
+                    "detail": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "detail"
+                ]
+            },
+            "OrganizationUnitTypeEnum": {
+                "enum": [
+                    "region",
+                    "district",
+                    "zone",
+                    "area",
+                    "section",
+                    "cell"
+                ],
+                "type": "string",
+                "description": "* `region` - region\n* `district` - district\n* `zone` - zone\n* `area` - area\n* `section` - section\n* `cell` - cell"
             },
             "PaginatedSundayReportList": {
                 "type": "object",
@@ -1196,6 +1856,55 @@
                         "items": {
                             "$ref": "#/components/schemas/UserRole"
                         }
+                    }
+                }
+            },
+            "PasswordResetConfirm": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string"
+                    },
+                    "uidb64": {
+                        "type": "string"
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 8
+                    },
+                    "password_confirmation": {
+                        "type": "string",
+                        "writeOnly": true
+                    }
+                },
+                "required": [
+                    "password",
+                    "password_confirmation",
+                    "token",
+                    "uidb64"
+                ]
+            },
+            "PasswordResetRequest": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email"
+                    }
+                },
+                "required": [
+                    "email"
+                ]
+            },
+            "PatchedReportApprovalSettings": {
+                "type": "object",
+                "properties": {
+                    "approval_interval": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "description": "Approval interval in seconds."
                     }
                 }
             },
@@ -1380,25 +2089,33 @@
                     }
                 }
             },
-            "PatchedUserRole": {
+            "RefreshToken": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "readOnly": true
-                    },
-                    "name": {
-                        "type": "string",
-                        "maxLength": 100
-                    },
-                    "permission_ids": {
-                        "type": "array",
-                        "items": {
-                            "type": "integer",
-                            "writeOnly": true
-                        },
-                        "writeOnly": true
+                    "refresh": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "refresh"
+                ]
+            },
+            "ReportApprovalSettings": {
+                "type": "object",
+                "properties": {
+                    "approval_interval": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0,
+                        "description": "Approval interval in seconds."
+                    }
+                }
+            },
+            "ReportDecision": {
+                "type": "object",
+                "properties": {
+                    "comment": {
+                        "type": "string"
                     }
                 }
             },
@@ -1646,6 +2363,21 @@
                     "refresh"
                 ]
             },
+            "TokenResponse": {
+                "type": "object",
+                "properties": {
+                    "access": {
+                        "type": "string"
+                    },
+                    "refresh": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "access",
+                    "refresh"
+                ]
+            },
             "UserRole": {
                 "type": "object",
                 "properties": {
@@ -1670,6 +2402,141 @@
                 "required": [
                     "id",
                     "name"
+                ]
+            },
+            "WhatsAppSundayReport": {
+                "type": "object",
+                "description": "Validate report submissions received from the WhatsApp integration.",
+                "properties": {
+                    "cell_code": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 100
+                    },
+                    "service_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "meeting_held": {
+                        "type": "boolean"
+                    },
+                    "members_present": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "guests_cards": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "decisions_card": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "guest_visitation": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "decisions_visitation": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "physical_checkup": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "phone_checkup": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "text_checkup": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "email_checkup": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "no_of_meeting_held": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "total_offering": {
+                        "type": "integer",
+                        "maximum": 9223372036854775807,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "currency": {
+                        "type": "string"
+                    },
+                    "holy_ghost_baptism": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "communion_service": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "community_project": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "less_priviledged_visit": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "cell_leader_visit": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "cell_members_visit": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "new_cells": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "converts": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "guests": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "outreach": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "comment": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "cell_code"
                 ]
             }
         },

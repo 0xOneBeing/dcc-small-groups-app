@@ -1,4 +1,11 @@
-import type { CellRole } from "@prisma/client";
+export type CellRole =
+  | "cell_leader"
+  | "section_leader"
+  | "area_coordinator"
+  | "zonal_coordinator"
+  | "district_coordinator"
+  | "regional_coordinator"
+  | "super_admin";
 
 export type RoleGroup = "leader" | "coordinator" | "super_admin";
 

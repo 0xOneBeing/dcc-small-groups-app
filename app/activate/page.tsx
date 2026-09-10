@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ActivateWizard } from "@/components/auth/ActivateWizard";
 
@@ -7,8 +8,12 @@ export default function ActivatePage() {
       subtitle="Alimosho Region"
       roleLabel="Activation"
       headline="Your account already exists — this just turns it on."
-      blurb="Accounts are created by your coordinator's hierarchy upload. Confirm your invitation, choose a password, and you're straight into your dashboard."
-      rightPane={<ActivateWizard />}
+      blurb="Accounts are created by your coordinator's hierarchy upload. Choose a password from your invitation link and you're straight into your dashboard."
+      rightPane={
+        <Suspense fallback={null}>
+          <ActivateWizard />
+        </Suspense>
+      }
     />
   );
 }

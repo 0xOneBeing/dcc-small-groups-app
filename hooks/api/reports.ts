@@ -6,10 +6,12 @@ import { API_ROUTES } from "@/lib/api/config";
 import type {
   CreateReportInput,
   Paginated,
-  RejectReportInput,
+  ReportDecisionInput,
   SundayReport,
   UpdateReportInput,
+  WhatsAppReportInput,
 } from "@/lib/api/types";
+import { asArray } from "@/lib/api/normalize";
 import {
   queryKeys,
   useApiInfiniteQuery,
@@ -36,12 +38,11 @@ export function useInfiniteReports(params?: QueryParams) {
   );
 }
 
-/** Reports submitted by the current Cell Leader. */
+/** Reports submitted by the current Cell Leader. The API returns a bare array here. */
 export function useMyReports() {
-  return useApiQuery<SundayReport[] | Paginated<SundayReport>>(
-    queryKeys.reports.mine,
-    API_ROUTES.myReports,
-  );
+  return useApiQuery<unknown, SundayReport[]>(queryKeys.reports.mine, API_ROUTES.myReports, {
+    select: (d) => asArray<SundayReport>(d),
+  });
 }
 
 export function useReport(id: string | null) {
@@ -51,6 +52,7 @@ export function useReport(id: string | null) {
   );
 }
 
+/** Create this Sunday's report for the authenticated Cell Leader's cell. */
 export function useCreateReport() {
   return useApiMutation<SundayReport, CreateReportInput>(API_ROUTES.reports, {
     method: "POST",
@@ -58,6 +60,15 @@ export function useCreateReport() {
   });
 }
 
+/** Submit on behalf of a cell identified by `cell_code` (the WhatsApp channel). */
+export function useCreateWhatsAppReport() {
+  return useApiMutation<SundayReport, WhatsAppReportInput>(API_ROUTES.reportWhatsapp, {
+    method: "POST",
+    invalidateKeys: [queryKeys.reports.all, queryKeys.dashboard.all],
+  });
+}
+
+/** Edit a REJECTED report before resubmitting (only the submitting Cell Leader may). */
 export function useUpdateReport(id: string) {
   return useApiMutation<SundayReport, UpdateReportInput>(
     (body) => ({ path: API_ROUTES.report(id), method: "PATCH", body }),
@@ -66,14 +77,15 @@ export function useUpdateReport(id: string) {
 }
 
 export function useApproveReport() {
-  return useApiMutation<SundayReport, { id: string }>(
-    ({ id }) => ({ path: API_ROUTES.reportApprove(id), method: "POST" }),
+  return useApiMutation<SundayReport, { id: string } & ReportDecisionInput>(
+    ({ id, ...body }) => ({ path: API_ROUTES.reportApprove(id), method: "POST", body }),
     { invalidateKeys: [queryKeys.reports.all, queryKeys.approvals.all, queryKeys.dashboard.all] },
   );
 }
 
+/** Send a report back for correction, with an optional explanatory comment. */
 export function useRejectReport() {
-  return useApiMutation<SundayReport, { id: string } & RejectReportInput>(
+  return useApiMutation<SundayReport, { id: string } & ReportDecisionInput>(
     ({ id, ...body }) => ({ path: API_ROUTES.reportReject(id), method: "POST", body }),
     { invalidateKeys: [queryKeys.reports.all, queryKeys.approvals.all, queryKeys.dashboard.all] },
   );

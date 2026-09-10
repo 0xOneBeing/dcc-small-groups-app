@@ -77,10 +77,11 @@ export const api = {
 
 /** Auth endpoints live at `/api/auth/*` (not under the proxy — they mint the cookies). */
 export const authApi = {
-  login: (email: string, password: string) =>
+  /** `identifier` is an email address or a cell code. */
+  login: (identifier: string, password: string) =>
     httpRequest<{ authenticated: true; user: Record<string, unknown> | null }>("/api/auth/login", {
       method: "POST",
-      body: { email, password },
+      body: { identifier, password },
       fetchOptions: { credentials: "same-origin" },
     }),
   logout: () =>

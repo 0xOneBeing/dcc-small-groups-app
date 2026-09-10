@@ -1,64 +1,60 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { colors } from "@/lib/tokens";
 import { TextInput, Button } from "@/components/ui";
-import { signInAction, requestMagicLinkAction } from "@/lib/auth/actions";
+import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api/errors";
 
 export function SignInForm() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const { login } = useAuth();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [magicSent, setMagicSent] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function submit() {
+  async function submit() {
     setError(null);
-    startTransition(async () => {
-      const result = await signInAction({ email, password });
-      if (!result.ok) {
-        setError(result.error);
-        return;
+    setPending(true);
+    try {
+      await login(identifier.trim(), password);
+      router.replace("/");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(
+          err.fieldError("email") ??
+            err.fieldError("cell_code") ??
+            err.fieldError("password") ??
+            err.message,
+        );
+      } else {
+        setError("Could not sign in. Please try again.");
       }
-      router.push(result.data.redirectTo);
-    });
-  }
-
-  function sendMagicLink() {
-    setError(null);
-    if (!email) {
-      setError("Enter your email address first");
-      return;
+      setPending(false);
     }
-    startTransition(async () => {
-      const result = await requestMagicLinkAction({ email });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setMagicSent(true);
-    });
   }
 
   return (
     <div style={{ width: "100%", maxWidth: 372, margin: "0 auto" }}>
       <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.035em", marginBottom: 7 }}>Sign in</div>
       <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.55, marginBottom: 28 }}>
-        Use the email address your coordinator onboarded you with.
+        Use the email address your coordinator onboarded you with, or your cell code.
       </div>
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          if (!pending) submit();
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <label style={{ display: "block" }}>
-            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Email address</span>
-            <TextInput value={email} onChange={setEmail} placeholder="name@email.com" type="email" />
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>
+              Email or cell code
+            </span>
+            <TextInput value={identifier} onChange={setIdentifier} placeholder="name@email.com" type="text" />
           </label>
           <label style={{ display: "block" }}>
             <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Password</span>
@@ -76,16 +72,6 @@ export function SignInForm() {
           {pending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "22px 0" }}>
-        <div style={{ flex: 1, height: 1, background: "#EDEFF3" }} />
-        <span style={{ fontSize: 11, color: colors.faint2, letterSpacing: "0.04em", textTransform: "uppercase" }}>or</span>
-        <div style={{ flex: 1, height: 1, background: "#EDEFF3" }} />
-      </div>
-
-      <Button variant="secondary" fullWidth style={{ padding: 14, fontSize: 14 }} onClick={sendMagicLink} disabled={pending}>
-        {magicSent ? "Check your email for a link" : "Email me a magic link"}
-      </Button>
 
       <div
         style={{

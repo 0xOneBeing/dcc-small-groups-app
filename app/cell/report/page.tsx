@@ -1,42 +1,33 @@
-import { redirect } from "next/navigation";
-import { requireRoleGroup } from "@/lib/auth/guard";
-import { getLeaderCell } from "@/lib/cells/service";
-import { getReport } from "@/lib/reports/service";
-import { ALL_FIGURE_KEYS, type FigureKey } from "@/lib/reports/fields";
-import { mostRecentSunday } from "@/lib/dates";
-import { isReportingWindowClosed } from "@/lib/rules/reportingWindow";
+"use client";
+
+import { useMemo } from "react";
 import { PageHeader } from "@/components/ui";
 import { ReportWizard } from "@/components/leader/ReportWizard";
+import { useMyReports } from "@/hooks/api/reports";
+import { mostRecentSunday, formatServiceDate } from "@/lib/dates";
+import { colors } from "@/lib/tokens";
 
-export default async function ReportPage() {
-  const { user } = await requireRoleGroup("leader");
-  const leaderCell = await getLeaderCell(user.id);
-  if (!leaderCell) redirect("/sign-in");
-  const { cell, unit } = leaderCell;
+export default function ReportPage() {
+  const serviceDate = useMemo(() => mostRecentSunday(new Date()).toISOString().slice(0, 10), []);
+  const mine = useMyReports();
 
-  const now = new Date();
-  const serviceDate = mostRecentSunday(now);
-  const report = await getReport(cell.id, serviceDate);
-  const windowClosed = isReportingWindowClosed(serviceDate, now);
-
-  const figures: Partial<Record<FigureKey, number | null>> = {};
-  for (const key of ALL_FIGURE_KEYS) {
-    figures[key] = report ? (report[key] as number | null) : null;
-  }
+  const existing = useMemo(
+    () => (mine.data ?? []).find((r) => r.service_date === serviceDate) ?? null,
+    [mine.data, serviceDate],
+  );
 
   return (
     <>
-      <PageHeader eyebrow={unit.name} title="Sunday report" sub={`For ${serviceDate.toISOString().slice(0, 10)}`} />
-      <ReportWizard
-        cellId={cell.id}
-        serviceDate={serviceDate.toISOString().slice(0, 10)}
-        initialFigures={figures}
-        initialComments={report?.comments ?? ""}
-        status={report?.status ?? null}
-        reviewNote={report?.reviewNote ?? null}
-        windowClosed={windowClosed}
-        canSubmitDirectly={true}
-      />
+      <PageHeader eyebrow="Sunday report" title={`For ${formatServiceDate(new Date(serviceDate))}`} sub={serviceDate} />
+      {mine.isLoading ? (
+        <div style={{ padding: 28, fontSize: 13, color: colors.muted }}>Loading this week&apos;s report…</div>
+      ) : mine.isError ? (
+        <div style={{ padding: 28, fontSize: 13, color: colors.red }}>
+          Could not load your reports: {mine.error.message}
+        </div>
+      ) : (
+        <ReportWizard serviceDate={serviceDate} existing={existing} />
+      )}
     </>
   );
 }

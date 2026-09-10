@@ -1,110 +1,103 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { colors, mono } from "@/lib/tokens";
 import { Card, Button, TextArea } from "@/components/ui";
-import { REPORT_STEPS, ALL_FIGURE_KEYS, type FigureKey } from "@/lib/reports/fields";
-import { saveDraftAction, submitReportAction } from "@/lib/reports/actions";
+import {
+  REPORT_STEPS,
+  ALL_FIGURE_KEYS,
+  CURRENCY_OPTIONS,
+  DEFAULT_CURRENCY,
+  type FigureKey,
+} from "@/lib/reports/fields";
 import { formatServiceDate } from "@/lib/dates";
+import { useCreateReport, useUpdateReport } from "@/hooks/api/reports";
+import { ApiError } from "@/lib/api/errors";
+import type { SundayReport } from "@/lib/api/types";
 
 type Figures = Partial<Record<FigureKey, number | null>>;
 
+function figuresFrom(report: SundayReport | null): Figures {
+  const out: Figures = {};
+  if (!report) return out;
+  for (const key of ALL_FIGURE_KEYS) {
+    const v = report[key];
+    out[key] = typeof v === "number" ? v : null;
+  }
+  return out;
+}
+
 export function ReportWizard({
-  cellId,
   serviceDate,
-  initialFigures,
-  initialComments,
-  status,
-  reviewNote,
-  windowClosed,
-  canSubmitDirectly,
+  existing,
 }: {
-  cellId: string;
-  serviceDate: string; // ISO date, e.g. "2026-08-23"
-  initialFigures: Figures;
-  initialComments: string;
-  status: "draft" | "pending" | "approved" | "sent_back" | null;
-  reviewNote: string | null;
-  windowClosed: boolean;
-  canSubmitDirectly: boolean;
+  serviceDate: string; // YYYY-MM-DD (a Sunday)
+  existing: SundayReport | null;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState<Figures>(initialFigures);
-  const [comments, setComments] = useState(initialComments);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const status = existing?.approval_status ?? null;
+  const locked = status === "PENDING" || status === "APPROVED";
+  const isResubmit = status === "REJECTED";
 
-  const locked = status === "approved" || status === "pending";
-  const blockedByWindow = windowClosed && !canSubmitDirectly && status !== "approved" && status !== "pending";
+  const [step, setStep] = useState(0);
+  const [values, setValues] = useState<Figures>(() => figuresFrom(existing));
+  const [meetingHeld, setMeetingHeld] = useState<boolean>(existing?.meeting_held ?? true);
+  const [currency, setCurrency] = useState<string>(existing?.currency || DEFAULT_CURRENCY);
+  const [comment, setComment] = useState<string>(existing?.comment ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  const createReport = useCreateReport();
+  const updateReport = useUpdateReport(existing?.id ?? "");
+  const pending = createReport.isPending || updateReport.isPending;
 
   const runningTotal = useMemo(
     () => ALL_FIGURE_KEYS.reduce((sum, k) => sum + (values[k] ?? 0), 0),
     [values],
   );
-  const answeredCount = useMemo(() => ALL_FIGURE_KEYS.filter((k) => values[k] != null).length, [values]);
-
-  function scheduleAutosave(nextValues: Figures, nextComments: string) {
-    if (locked || blockedByWindow) return;
-    setSaveState("saving");
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => {
-      startTransition(async () => {
-        const result = await saveDraftAction({ cellId, serviceDate, figures: nextValues, comments: nextComments });
-        setSaveState(result.ok ? "saved" : "idle");
-      });
-    }, 800);
-  }
-
-  useEffect(() => () => {
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-  }, []);
+  const answeredCount = useMemo(
+    () => ALL_FIGURE_KEYS.filter((k) => values[k] != null).length,
+    [values],
+  );
 
   function setFigure(key: FigureKey, raw: string) {
     const digits = raw.replace(/[^0-9]/g, "");
-    const next: Figures = { ...values, [key]: digits === "" ? null : Number(digits) };
-    setValues(next);
-    scheduleAutosave(next, comments);
+    setValues((v) => ({ ...v, [key]: digits === "" ? null : Number(digits) }));
   }
 
-  function setCommentsValue(v: string) {
-    setComments(v);
-    scheduleAutosave(values, v);
+  function buildPayload() {
+    const payload: Record<string, unknown> = { service_date: serviceDate, meeting_held: meetingHeld };
+    for (const key of ALL_FIGURE_KEYS) {
+      if (values[key] != null) payload[key] = values[key];
+    }
+    if (values.total_offering != null) payload.currency = currency;
+    if (comment.trim()) payload.comment = comment.trim();
+    return payload;
   }
 
-  function submit() {
+  async function submit() {
     setError(null);
-    startTransition(async () => {
-      const result = await submitReportAction({ cellId, serviceDate, figures: values, comments });
-      if (!result.ok) {
-        setError(result.error);
-        return;
+    const payload = buildPayload();
+    try {
+      if (isResubmit && existing) {
+        await updateReport.mutateAsync(payload as never);
+      } else {
+        await createReport.mutateAsync(payload as never);
       }
       router.push("/cell");
-    });
-  }
-
-  if (blockedByWindow) {
-    return (
-      <div style={{ padding: 28, maxWidth: 640 }}>
-        <Card style={{ padding: 24, background: colors.redSoft, borderColor: colors.redSoftBorder }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>The reporting window has closed</div>
-          <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.6 }}>
-            {formatServiceDate(new Date(serviceDate))}&apos;s window closed Monday at 7:00am. Ask your Section Leader to
-            file this report on your behalf.
-          </div>
-        </Card>
-      </div>
-    );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not submit the report. Please try again.");
+    }
   }
 
   const current = REPORT_STEPS[step];
+  const isCommentsStep = current.category === "Comments";
 
   return (
-    <div style={{ padding: 28, display: "grid", gridTemplateColumns: "200px 1fr 260px", gap: 24, alignItems: "flex-start" }} className="dcc-wizard">
+    <div
+      style={{ padding: 28, display: "grid", gridTemplateColumns: "200px 1fr 260px", gap: 24, alignItems: "flex-start" }}
+      className="dcc-wizard"
+    >
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {REPORT_STEPS.map((s, i) => (
           <button
@@ -132,14 +125,20 @@ export function ReportWizard({
         {locked && (
           <Card style={{ padding: 16, marginBottom: 16, background: colors.panel }}>
             <div style={{ fontSize: 12.5, color: colors.muted }}>
-              {status === "approved" ? "This report is approved and locked." : "This report is submitted and awaiting review."}
+              {status === "APPROVED"
+                ? "This report is approved and locked."
+                : "This report is submitted and awaiting review."}
             </div>
           </Card>
         )}
-        {status === "sent_back" && reviewNote && (
+        {isResubmit && (
           <Card style={{ padding: 16, marginBottom: 16, background: colors.redSoft, borderColor: colors.redSoftBorder }}>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.red, marginBottom: 4 }}>SENT BACK</div>
-            <div style={{ fontSize: 13, color: colors.ink }}>{reviewNote}</div>
+            <div style={{ fontSize: 13, color: colors.ink }}>
+              {existing?.comment
+                ? existing.comment
+                : "Your approver sent this back for correction. Update the figures and resubmit."}
+            </div>
           </Card>
         )}
 
@@ -160,18 +159,84 @@ export function ReportWizard({
 
         <Card style={{ padding: 20 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {current.category === "Comments" && (
-              <label style={{ display: "block" }}>
-                <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.muted, marginBottom: 6 }}>Comments</span>
-                <TextArea value={comments} onChange={setCommentsValue} placeholder="Anything worth recording…" />
-              </label>
+            {isCommentsStep && (
+              <>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44 }}>
+                  <span style={{ fontSize: 13.5 }}>Did the cell meeting hold this Sunday?</span>
+                  <span style={{ display: "flex", gap: 6 }}>
+                    {[
+                      ["Yes", true],
+                      ["No", false],
+                    ].map(([label, val]) => (
+                      <button
+                        key={String(label)}
+                        type="button"
+                        disabled={locked}
+                        onClick={() => setMeetingHeld(val as boolean)}
+                        style={{
+                          padding: "8px 14px",
+                          minHeight: 40,
+                          borderRadius: 9,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: locked ? "default" : "pointer",
+                          border: `1.5px solid ${meetingHeld === val ? colors.red : colors.borderStrong}`,
+                          background: meetingHeld === val ? colors.redSoft : colors.fieldBg,
+                          color: meetingHeld === val ? colors.red : colors.muted,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 44 }}>
+                  <span style={{ fontSize: 13.5 }}>Offering currency</span>
+                  <select
+                    disabled={locked}
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    style={{
+                      minHeight: 40,
+                      border: `1.5px solid ${colors.borderStrong}`,
+                      borderRadius: 10,
+                      padding: "8px 10px",
+                      fontSize: 14,
+                      fontFamily: mono,
+                      background: colors.fieldBg,
+                    }}
+                  >
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "block" }}>
+                  <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: colors.muted, marginBottom: 6 }}>Comments</span>
+                  <TextArea value={comment} onChange={setComment} placeholder="Testimonies, and anything else worth recording…" />
+                </label>
+              </>
             )}
+
             {current.fields.map((f, i) => {
               const showGroup = f.group && current.fields[i - 1]?.group !== f.group;
               return (
                 <div key={f.key}>
                   {showGroup && (
-                    <div style={{ fontSize: 11, fontWeight: 700, color: colors.faint, textTransform: "uppercase", letterSpacing: "0.04em", margin: "6px 0" }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: colors.faint,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        margin: "6px 0",
+                      }}
+                    >
                       {f.group}
                     </div>
                   )}
@@ -222,7 +287,7 @@ export function ReportWizard({
           ) : (
             !locked && (
               <Button variant="primary" onClick={submit} disabled={pending}>
-                {pending ? "Submitting…" : "Submit report"}
+                {pending ? "Submitting…" : isResubmit ? "Resubmit report" : "Submit report"}
               </Button>
             )
           )}
@@ -230,15 +295,26 @@ export function ReportWizard({
       </div>
 
       <Card style={{ padding: 18, position: "sticky", top: 20 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.muted, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: colors.muted,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            marginBottom: 10,
+          }}
+        >
           Running total
         </div>
-        <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.02em", fontFamily: mono, marginBottom: 4 }}>{runningTotal}</div>
+        <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.02em", fontFamily: mono, marginBottom: 4 }}>
+          {runningTotal}
+        </div>
         <div style={{ fontSize: 12, color: colors.faint, marginBottom: 16 }}>
           {answeredCount} of {ALL_FIGURE_KEYS.length} figures answered
         </div>
         <div style={{ fontSize: 11.5, color: colors.faint2 }}>
-          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Draft saved" : "Autosaves as you type"}
+          For {formatServiceDate(new Date(serviceDate))} · nothing is saved until you submit
         </div>
       </Card>
     </div>

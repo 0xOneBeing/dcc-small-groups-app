@@ -1,210 +1,114 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { colors, mono } from "@/lib/tokens";
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { colors } from "@/lib/tokens";
 import { TextInput, Button } from "@/components/ui";
-import { verifyInvitationAction, activateAccountAction, type InvitationPreview } from "@/lib/auth/actions";
-
-type Step = 0 | 1 | 2;
+import { httpRequest } from "@/lib/api/http";
+import { ApiError } from "@/lib/api/errors";
 
 export function ActivateWizard() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>(0);
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const params = useSearchParams();
+  const token = params.get("token") ?? "";
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [preview, setPreview] = useState<InvitationPreview | null>(null);
-  const [totpUri, setTotpUri] = useState<string | null>(null);
-  const [redirectTo, setRedirectTo] = useState("/sign-in");
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  function confirmInvitation() {
+  async function activate() {
     setError(null);
-    startTransition(async () => {
-      const result = await verifyInvitationAction({ email, invitationCode: code });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setPreview(result.data);
-      setStep(1);
-    });
-  }
-
-  function setPasswordStep() {
-    setError(null);
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (!token) {
+      setError("This activation link is missing its token. Use the link from your invitation email.");
       return;
     }
-    startTransition(async () => {
-      const result = await activateAccountAction({ email, invitationCode: code, password, confirmPassword });
-      if (!result.ok) {
-        setError(result.error);
-        return;
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setPending(true);
+    try {
+      await httpRequest("/api/auth/complete-profile", {
+        method: "POST",
+        body: { token, password, password_confirmation: confirmPassword },
+        fetchOptions: { credentials: "same-origin" },
+      });
+      router.replace("/sign-in?activated=1");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(
+          err.fieldError("password") ??
+            err.fieldError("token") ??
+            err.fieldError("password_confirmation") ??
+            err.message,
+        );
+      } else {
+        setError("Could not activate your account. Please try again.");
       }
-      if (result.data.totpProvisioningUri) setTotpUri(result.data.totpProvisioningUri);
-      setRedirectTo(result.data.redirectTo);
-      setStep(2);
-    });
-  }
-
-  function finish() {
-    router.push(redirectTo);
+      setPending(false);
+    }
   }
 
   return (
     <div style={{ width: "100%", maxWidth: 400, margin: "0 auto" }}>
-      <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
-        {["Confirm", "Password", "Review"].map((label, i) => (
-          <div
-            key={label}
-            style={{
-              flex: 1,
-              height: 3,
-              borderRadius: 3,
-              background: i <= step ? colors.red : colors.hairline,
-            }}
-          />
-        ))}
+      <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.035em", marginBottom: 7 }}>Activate your account</div>
+      <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.55, marginBottom: 28 }}>
+        Choose a password to finish setting up the account your coordinator created for you.
       </div>
 
-      {step === 0 && (
-        <>
-          <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.035em", marginBottom: 7 }}>Activate your account</div>
-          <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.55, marginBottom: 28 }}>
-            Enter the email your coordinator used and the six-character code from your invitation.
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              confirmInvitation();
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <label style={{ display: "block" }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Email address</span>
-                <TextInput value={email} onChange={setEmail} placeholder="name@email.com" type="email" />
-              </label>
-              <label style={{ display: "block" }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Invitation code</span>
-                <TextInput value={code} onChange={(v) => setCode(v.toUpperCase())} placeholder="XXXXXX" mono />
-              </label>
-            </div>
-            {error && (
-              <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: colors.red }}>
-                {error}
-              </div>
-            )}
-            <Button variant="primary" fullWidth style={{ marginTop: 24, padding: 15, fontSize: 14.5 }} disabled={pending}>
-              {pending ? "Checking…" : "Continue"}
-            </Button>
-          </form>
-        </>
+      {!token && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 20,
+            padding: "12px 14px",
+            background: colors.redSoft,
+            border: `1px solid ${colors.redSoftBorder}`,
+            borderRadius: 10,
+            fontSize: 12.5,
+            color: colors.red,
+            lineHeight: 1.5,
+          }}
+        >
+          Open this page from the link in your invitation email — it carries the token that activates your account.
+        </div>
       )}
 
-      {step === 1 && (
-        <>
-          <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.035em", marginBottom: 7 }}>Choose a password</div>
-          <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.55, marginBottom: 28 }}>
-            At least 10 characters, with a letter and a number.
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!pending) activate();
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <label style={{ display: "block" }}>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>New password</span>
+            <TextInput value={password} onChange={setPassword} type="password" placeholder="••••••••" />
+          </label>
+          <label style={{ display: "block" }}>
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Confirm password</span>
+            <TextInput value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="••••••••" />
+          </label>
+        </div>
+
+        {error && (
+          <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: colors.red }}>
+            {error}
           </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setPasswordStep();
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <label style={{ display: "block" }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>New password</span>
-                <TextInput value={password} onChange={setPassword} type="password" placeholder="••••••••" />
-              </label>
-              <label style={{ display: "block" }}>
-                <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 7 }}>Confirm password</span>
-                <TextInput value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="••••••••" />
-              </label>
-            </div>
-            {error && (
-              <div role="alert" style={{ marginTop: 14, fontSize: 12.5, color: colors.red }}>
-                {error}
-              </div>
-            )}
-            <Button variant="primary" fullWidth style={{ marginTop: 24, padding: 15, fontSize: 14.5 }} disabled={pending}>
-              {pending ? "Saving…" : "Continue"}
-            </Button>
-          </form>
-        </>
-      )}
+        )}
 
-      {step === 2 && preview && (
-        <>
-          <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.035em", marginBottom: 7 }}>You&apos;re set, {preview.name.split(" ")[0]}</div>
-          <div style={{ fontSize: 13.5, color: colors.muted, lineHeight: 1.55, marginBottom: 22 }}>
-            Here&apos;s what was recorded for your account.
-          </div>
+        <Button variant="primary" fullWidth style={{ marginTop: 24, padding: 15, fontSize: 14.5 }} disabled={pending || !token}>
+          {pending ? "Activating…" : "Activate account"}
+        </Button>
+      </form>
 
-          <div style={{ border: `1px solid ${colors.border}`, borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
-            {[
-              ["Name", preview.name],
-              ["Role", preview.roleLabel],
-              ["Scope", preview.scopeLabel],
-            ].map(([label, value], i) => (
-              <div
-                key={label}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "11px 14px",
-                  borderTop: i === 0 ? "none" : `1px solid ${colors.hairline}`,
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ color: colors.muted }}>{label}</span>
-                <span style={{ fontWeight: 600, fontFamily: label === "Scope" ? mono : undefined }}>{value}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ fontSize: 11.5, fontWeight: 600, color: colors.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            You can
-          </div>
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-            {preview.permissions.map((p) => (
-              <li key={p} style={{ display: "flex", gap: 8, fontSize: 13, color: colors.muted, lineHeight: 1.5 }}>
-                <span style={{ color: colors.green, flexShrink: 0 }}>✓</span>
-                {p}
-              </li>
-            ))}
-          </ul>
-
-          {totpUri && (
-            <div
-              style={{
-                marginBottom: 20,
-                padding: "14px 16px",
-                background: colors.panel,
-                border: `1px solid ${colors.border}`,
-                borderRadius: 12,
-                fontSize: 12,
-                color: colors.muted,
-                lineHeight: 1.6,
-                wordBreak: "break-all",
-              }}
-            >
-              Add this account to your authenticator app before continuing — Super Admin sign-ins always require it:
-              <div style={{ marginTop: 8, fontFamily: mono, fontSize: 11 }}>{totpUri}</div>
-            </div>
-          )}
-
-          <Button variant="primary" fullWidth style={{ padding: 15, fontSize: 14.5 }} onClick={finish}>
-            {totpUri ? "Continue to verification" : "Go to my dashboard"}
-          </Button>
-        </>
-      )}
+      <div style={{ marginTop: 22, fontSize: 12, color: colors.faint2, lineHeight: 1.55, textAlign: "center" }}>
+        Already activated?{" "}
+        <a href="/sign-in" style={{ fontWeight: 600 }}>
+          Sign in
+        </a>
+      </div>
     </div>
   );
 }

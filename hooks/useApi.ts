@@ -37,6 +37,7 @@ import {
 import { useCallback } from "react";
 import { api, type ApiCallOptions } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
+import { unwrapData } from "@/lib/api/normalize";
 import type { QueryParams } from "@/lib/api/http";
 import type { Paginated } from "@/lib/api/types";
 
@@ -75,7 +76,6 @@ export const queryKeys = {
   roles: {
     all: ["roles"] as const,
     list: (params?: QueryParams) => ["roles", "list", params ?? {}] as const,
-    detail: (id: string) => ["roles", "detail", id] as const,
   },
 } as const;
 
@@ -191,7 +191,7 @@ export function useApiMutation<TData = unknown, TVariables = void>(
   const { method: defaultMethod = "POST", invalidateKeys, onSuccess, ...mutationOptions } = options;
 
   const mutationFn = useCallback(
-    (variables: TVariables): Promise<TData> => {
+    async (variables: TVariables): Promise<TData> => {
       const target: MutationTarget =
         typeof resolver === "string"
           ? { path: resolver, method: defaultMethod, body: variables }
@@ -199,18 +199,26 @@ export function useApiMutation<TData = unknown, TVariables = void>(
       const method = target.method ?? defaultMethod;
       const req = target.request;
 
+      let raw: unknown;
       switch (method) {
         case "GET":
-          return api.get<TData>(target.path, req);
+          raw = await api.get(target.path, req);
+          break;
         case "DELETE":
-          return api.delete<TData>(target.path, req);
+          raw = await api.delete(target.path, req);
+          break;
         case "PUT":
-          return api.put<TData>(target.path, target.body, req);
+          raw = await api.put(target.path, target.body, req);
+          break;
         case "PATCH":
-          return api.patch<TData>(target.path, target.body, req);
+          raw = await api.patch(target.path, target.body, req);
+          break;
         default:
-          return api.post<TData>(target.path, target.body, req);
+          raw = await api.post(target.path, target.body, req);
       }
+      // Auth-style endpoints wrap the payload in `{ message, data }`; resource
+      // endpoints don't. `unwrapData` is a no-op for the latter.
+      return unwrapData<TData>(raw);
     },
     [resolver, defaultMethod],
   );

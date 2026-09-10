@@ -23,7 +23,8 @@ export interface UseAuthResult {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: ApiError | null;
-  login: (email: string, password: string) => Promise<SessionUser | null>;
+  /** `identifier` is an email address or a cell code. */
+  login: (identifier: string, password: string) => Promise<SessionUser | null>;
   logout: () => Promise<void>;
   refetch: () => void;
 }
@@ -50,8 +51,8 @@ export function useAuth(): UseAuthResult {
   }, [queryClient]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await authApi.login(email, password);
+    async (identifier: string, password: string) => {
+      const res = await authApi.login(identifier, password);
       queryClient.setQueryData(queryKeys.session, {
         authenticated: true,
         user: res.user as SessionUser | null,

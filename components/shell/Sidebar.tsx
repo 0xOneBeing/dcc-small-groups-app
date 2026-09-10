@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { colors, mono } from "@/lib/tokens";
-import { signOutAction } from "@/lib/auth/actions";
+import { useAuth } from "@/hooks/useAuth";
 import type { RoleGroup } from "@/lib/auth/roleHome";
 
 interface NavItem {
@@ -44,7 +44,14 @@ export function Sidebar({
   badges?: Record<string, number>;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
   const items = NAV[group];
+
+  async function signOut() {
+    await logout();
+    router.replace("/sign-in");
+  }
   const initials = userName
     .split(" ")
     .map((x) => x[0])
@@ -181,15 +188,14 @@ export function Sidebar({
             {userRoleLabel}
           </div>
         </div>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            aria-label="Sign out"
-            style={{ border: "none", background: "transparent", color: colors.faint, cursor: "pointer", fontSize: 12, minHeight: 44, minWidth: 44 }}
-          >
-            ⏻
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={signOut}
+          aria-label="Sign out"
+          style={{ border: "none", background: "transparent", color: colors.faint, cursor: "pointer", fontSize: 12, minHeight: 44, minWidth: 44 }}
+        >
+          ⏻
+        </button>
       </div>
     </nav>
   );

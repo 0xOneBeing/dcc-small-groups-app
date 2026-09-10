@@ -1,15 +1,14 @@
 /**
- * POST /api/auth/login  { email, password }
+ * POST /api/auth/login  { identifier, password }
  *
- * Exchanges credentials for a JWT pair upstream and stores them in httpOnly
- * cookies. Responds with the decoded access-token claims so the client knows
- * who is signed in — never with the tokens themselves.
+ * `identifier` is an email address or a cell code (the upstream `v1/user/login/`
+ * accepts either). Stores the JWT pair + user profile in httpOnly cookies and
+ * responds with the profile only — never the tokens.
  */
 
 import { NextResponse } from "next/server";
 import { ApiError } from "@/lib/api/errors";
-import { decodeJwt, obtainTokens, writeTokensOnResponse } from "@/lib/api/tokens";
-import type { AccessTokenClaims } from "@/lib/api/types";
+import { loginWithPassword, writeTokensOnResponse } from "@/lib/api/tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -21,24 +20,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "Expected a JSON body." }, { status: 400 });
   }
 
-  const { email, password } = (payload ?? {}) as { email?: unknown; password?: unknown };
-  if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
+  const body = (payload ?? {}) as Record<string, unknown>;
+  const password = body.password;
+  const rawId =
+    (typeof body.identifier === "string" && body.identifier) ||
+    (typeof body.email === "string" && body.email) ||
+    (typeof body.cell_code === "string" && body.cell_code) ||
+    "";
+  const identifier = rawId.trim();
+
+  if (!identifier || typeof password !== "string" || !password) {
     return NextResponse.json(
-      { detail: "Email and password are required.", code: "invalid_input" },
+      { detail: "An email or cell code and a password are required.", code: "invalid_input" },
       { status: 400 },
     );
   }
 
+  const credentials = identifier.includes("@")
+    ? { email: identifier, password }
+    : { cell_code: identifier, password };
+
   try {
-    const tokens = await obtainTokens(email, password);
-    const claims = decodeJwt<AccessTokenClaims>(tokens.access);
-    const res = NextResponse.json({
-      authenticated: true,
-      user: claims
-        ? { id: claims.user_id ?? null, ...stripStandardClaims(claims) }
-        : null,
-    });
-    writeTokensOnResponse(res, tokens);
+    const { access, refresh, user } = await loginWithPassword(credentials);
+    const res = NextResponse.json({ authenticated: true, user });
+    writeTokensOnResponse(res, { access, refresh, user });
     return res;
   } catch (err) {
     if (err instanceof ApiError) {
@@ -51,14 +56,4 @@ export async function POST(request: Request) {
       { status: 502 },
     );
   }
-}
-
-function stripStandardClaims(claims: AccessTokenClaims) {
-  const { token_type, exp, iat, jti, user_id, ...rest } = claims;
-  void token_type;
-  void exp;
-  void iat;
-  void jti;
-  void user_id;
-  return rest;
 }

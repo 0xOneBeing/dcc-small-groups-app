@@ -26,10 +26,14 @@ export function TextInput({
   style?: CSSProperties;
 }) {
   const [focused, setFocused] = useState(false);
-  return (
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === "password";
+  const inputType = isPassword && revealed ? "text" : type;
+
+  const input = (
     <input
       value={value}
-      type={type}
+      type={inputType}
       onChange={(e) => onChange(e.target.value)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
@@ -39,6 +43,7 @@ export function TextInput({
         border: `1.5px solid ${focused ? colors.red : colors.borderStrong}`,
         borderRadius: radius,
         padding,
+        paddingRight: isPassword ? 44 : undefined,
         fontSize,
         outline: "none",
         background: focused ? "#fff" : colors.fieldBg,
@@ -46,6 +51,47 @@ export function TextInput({
         ...style,
       }}
     />
+  );
+
+  if (!isPassword) return input;
+
+  return (
+    <div style={{ position: "relative", width: "100%" }}>
+      {input}
+      <button
+        type="button"
+        onClick={() => setRevealed((r) => !r)}
+        aria-label={revealed ? "Hide password" : "Show password"}
+        aria-pressed={revealed}
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          right: 6,
+          width: 34,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          color: colors.faint2,
+          padding: 0,
+        }}
+      >
+        <EyeIcon off={revealed} />
+      </button>
+    </div>
+  );
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+      {off && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
   );
 }
 
