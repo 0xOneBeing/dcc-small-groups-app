@@ -2,14 +2,22 @@ import { PageHeader, Card } from "@/components/ui";
 import { colors } from "@/lib/tokens";
 
 /**
- * Placeholder for Cell Leader screens whose data the DCC API does not expose
- * yet (cell members / attendance register, follow-up assignments, resources).
- * Replace with a real screen once the corresponding endpoints ship.
+ * Placeholder for screens whose data the DCC API does not expose yet
+ * (follow-up assignments, cell members / attendance, resources). Replace with
+ * a real screen once the corresponding endpoints ship.
  */
-export function NotYetAvailable({ title, blurb }: { title: string; blurb: string }) {
+export function NotYetAvailable({
+  title,
+  blurb,
+  eyebrow = "My cell",
+}: {
+  title: string;
+  blurb: string;
+  eyebrow?: string;
+}) {
   return (
     <>
-      <PageHeader eyebrow="My cell" title={title} sub="Not available yet" />
+      <PageHeader eyebrow={eyebrow} title={title} sub="Not available yet" />
       <div style={{ padding: 28, maxWidth: 640 }}>
         <Card style={{ padding: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Coming with a later API release</div>

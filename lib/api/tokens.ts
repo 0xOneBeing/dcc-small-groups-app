@@ -170,7 +170,8 @@ export async function loginWithPassword(credentials: {
  * Look up a role UUID's name from `/api/v1/roles/`. Never throws — routing
  * falls back without it. Note: cell leaders get 403 on that endpoint, so
  * `role_name` only enriches for privileged users; leaf users route via the
- * `is_superuser` flag + the "leader" default in `roleGroupFor`.
+ * `is_superuser` flag + the `CELL_LEADER` default in `resolveRole`
+ * (`lib/auth/roles.ts`).
  */
 async function resolveRoleName(roleId: string | undefined, access: string): Promise<string | null> {
   if (!roleId) return null;

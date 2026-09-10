@@ -11,7 +11,8 @@ import "server-only";
  */
 
 import { redirect } from "next/navigation";
-import { getServerSession, type ServerSession } from "./session";
+import { capabilitiesForSession, getServerSession, roleFor, type ServerSession } from "./session";
+import type { AppArea, RoleCapabilities, RoleName } from "@/lib/auth/roles";
 import type { ApiUser } from "./types";
 
 export async function requireSession(): Promise<ServerSession> {
@@ -30,20 +31,44 @@ export function displayName(user: ApiUser | null): string {
   return full || "Cell Leader";
 }
 
-export interface LeaderContext {
+export interface ShellContext {
   session: ServerSession;
   userName: string;
+  role: RoleName;
+  capabilities: RoleCapabilities;
+  /** Route group the user belongs in. */
+  area: AppArea;
+  /** Display label — the API's `role_name` if present, else the capability label. */
   roleLabel: string;
 }
 
-export async function requireLeader(): Promise<LeaderContext> {
+/**
+ * Everything an authenticated shell layout needs. Requires a live session.
+ *
+ * `expectedArea` is advisory for now: the `/coordinator`, `/msu`, and `/admin`
+ * route groups don't exist yet, so bouncing a mismatched user to their real
+ * home would land on a 404. Pass `{ enforce: true }` once those exist.
+ */
+export async function requireShellContext(
+  expectedArea?: AppArea,
+  opts: { enforce?: boolean } = {},
+): Promise<ShellContext> {
   const session = await requireSession();
+  const role = roleFor(session);
+  const capabilities = capabilitiesForSession(session);
+
+  if (opts.enforce && expectedArea && capabilities.area !== expectedArea) {
+    redirect(capabilities.home);
+  }
+
   return {
     session,
     userName: displayName(session.user),
+    role,
+    capabilities,
+    area: capabilities.area,
     roleLabel:
       (typeof session.user?.role_name === "string" && session.user.role_name) ||
-      (typeof session.user?.role === "string" && session.user.role) ||
-      "Cell Leader",
+      capabilities.label,
   };
 }

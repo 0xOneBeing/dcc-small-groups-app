@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
-import type { RoleGroup } from "@/lib/auth/roleHome";
+import type { AppArea } from "@/lib/auth/roles";
 
 /**
  * Shared app chrome for every authenticated route group. Below 820px the
@@ -8,13 +8,13 @@ import type { RoleGroup } from "@/lib/auth/roleHome";
  * globals.css (see `.dcc-sidebar`), and the shell goes full-bleed.
  */
 export function Shell({
-  group,
+  area,
   userName,
   userRoleLabel,
   badges,
   children,
 }: {
-  group: RoleGroup;
+  area: AppArea;
   userName: string;
   userRoleLabel: string;
   badges?: Record<string, number>;
@@ -22,7 +22,7 @@ export function Shell({
 }) {
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F7F8FA" }} className="dcc-shell">
-      <Sidebar group={group} userName={userName} userRoleLabel={userRoleLabel} badges={badges} />
+      <Sidebar area={area} userName={userName} userRoleLabel={userRoleLabel} badges={badges} />
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
     </div>
   );
