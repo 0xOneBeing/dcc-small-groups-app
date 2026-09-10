@@ -16,4 +16,6 @@ export type {
 } from "./useApi";
 export { useAuth } from "./useAuth";
 export type { SessionUser, UseAuthResult } from "./useAuth";
+export { useRole } from "./useRole";
+export type { UseRoleResult } from "./useRole";
 export * from "./api";
