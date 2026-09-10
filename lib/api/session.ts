@@ -9,7 +9,12 @@ import "server-only";
  */
 
 import { decodeJwt, isJwtExpired, readTokens, readUser, refreshTokens } from "./tokens";
-import { homePathFor, type RoleGroup } from "@/lib/auth/roleHome";
+import {
+  capabilitiesFor,
+  resolveRole,
+  type RoleCapabilities,
+  type RoleName,
+} from "@/lib/auth/roles";
 import type { AccessTokenClaims, ApiUser } from "./types";
 
 export interface ServerSession {
@@ -38,44 +43,27 @@ export async function getServerSession(): Promise<ServerSession> {
   return { authenticated: false, user: null, claims: null };
 }
 
-const COORDINATOR_TOKENS = [
-  "section",
-  "area",
-  "zone",
-  "zonal",
-  "district",
-  "region",
-  "regional",
-  "coordinator",
-];
-
 /**
- * Best-effort role-group resolution. Trusts the API's `is_superuser` flag
- * first, then matches on `role_name` (the login route enriches the `role`
- * UUID into a name). Anything unrecognised routes to the Cell Leader home.
+ * Resolve a session to exactly one of the API's nine roles. Trusts
+ * `is_superuser`, then an exact (case-sensitive) match of `role_name` — which
+ * the login route enriches from `/api/v1/roles/` — then any role hint in the
+ * JWT claims. Cell Leaders get a 403 on the roles list, so they fall through
+ * to `CELL_LEADER` by default.
  */
-export function roleGroupFor(session: Pick<ServerSession, "user" | "claims">): RoleGroup {
-  const u = session.user;
+export function roleFor(session: Pick<ServerSession, "user" | "claims">): RoleName {
+  return resolveRole({
+    isSuperuser: session.user?.is_superuser ?? null,
+    roleName: session.user?.role_name,
+    claims: session.claims as Record<string, unknown> | null,
+  });
+}
 
-  if (u?.is_superuser === true) return "super_admin";
-
-  const raw: unknown[] = [];
-  if (u) raw.push(u.role_name, u.role);
-  const c = session.claims as Record<string, unknown> | null;
-  if (c) raw.push(c.role, c.role_name, c.roles, c.user_role, c.groups, c.scope);
-
-  const values = raw
-    .flatMap((v) => (Array.isArray(v) ? v : [v]))
-    .filter((v): v is string => typeof v === "string")
-    .map((v) => v.toLowerCase());
-
-  if (values.some((v) => v.includes("super") || v.includes("admin"))) return "super_admin";
-  if (values.some((v) => v.includes("cell") && v.includes("leader"))) return "leader";
-  if (values.some((v) => v === "cell" || v === "leader" || v === "cell_leader")) return "leader";
-  if (values.some((v) => COORDINATOR_TOKENS.some((t) => v.includes(t)))) return "coordinator";
-  return "leader";
+export function capabilitiesForSession(
+  session: Pick<ServerSession, "user" | "claims">,
+): RoleCapabilities {
+  return capabilitiesFor(roleFor(session));
 }
 
 export function homeForSession(session: Pick<ServerSession, "user" | "claims">): string {
-  return homePathFor(roleGroupFor(session));
+  return capabilitiesForSession(session).home;
 }

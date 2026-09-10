@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { colors, mono } from "@/lib/tokens";
 import { useAuth } from "@/hooks/useAuth";
 import { notify } from "@/lib/toast";
-import type { RoleGroup } from "@/lib/auth/roleHome";
+import { AREA_ROOTS, type AppArea } from "@/lib/auth/roles";
 
 interface NavItem {
   href: string;
@@ -15,8 +15,8 @@ interface NavItem {
   badge?: number;
 }
 
-const NAV: Record<RoleGroup, NavItem[]> = {
-  leader: [
+const NAV: Record<AppArea, NavItem[]> = {
+  cell: [
     { href: "/cell", label: "My cell", icon: "▦" },
     { href: "/cell/report", label: "Sunday report", icon: "▤" },
     { href: "/cell/follow-ups", label: "Follow-ups", icon: "◎" },
@@ -30,16 +30,27 @@ const NAV: Record<RoleGroup, NavItem[]> = {
     { href: "/coordinator/follow-ups", label: "Follow-ups", icon: "◎" },
     { href: "/coordinator/exports", label: "Exports", icon: "↓" },
   ],
-  super_admin: [{ href: "/admin", label: "Hierarchy upload", icon: "↑" }],
+  msu: [
+    { href: "/msu", label: "Assignments", icon: "▦" },
+    { href: "/msu/new", label: "New entry", icon: "▤" },
+    { href: "/msu/follow-ups", label: "Follow-ups", icon: "◎" },
+    { href: "/msu/exports", label: "Exports", icon: "↓" },
+  ],
+  admin: [
+    { href: "/admin", label: "Hierarchy upload", icon: "↑" },
+    { href: "/admin/users", label: "Users & onboarding", icon: "◇" },
+  ],
 };
 
+const AREA_ROOT_PATHS = new Set(Object.values(AREA_ROOTS));
+
 export function Sidebar({
-  group,
+  area,
   userName,
   userRoleLabel,
   badges = {},
 }: {
-  group: RoleGroup;
+  area: AppArea;
   userName: string;
   userRoleLabel: string;
   badges?: Record<string, number>;
@@ -47,7 +58,7 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
-  const items = NAV[group];
+  const items = NAV[area] ?? NAV.cell;
 
   async function signOut() {
     try {
@@ -114,7 +125,9 @@ export function Sidebar({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }} className="dcc-sidebar-items">
         {items.map((n) => {
-          const on = pathname === n.href || (n.href !== "/cell" && n.href !== "/coordinator" && pathname?.startsWith(n.href));
+          const on =
+            pathname === n.href ||
+            (!AREA_ROOT_PATHS.has(n.href) && !!pathname?.startsWith(n.href));
           const badge = badges[n.href];
           return (
             <Link
