@@ -101,12 +101,14 @@ export function TextArea({
   placeholder,
   minHeight = 150,
   fontSize = 14,
+  disabled = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   minHeight?: number;
   fontSize?: number;
+  disabled?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -116,6 +118,7 @@ export function TextArea({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       placeholder={placeholder}
+      disabled={disabled}
       style={{
         width: "100%",
         minHeight,
@@ -126,7 +129,8 @@ export function TextArea({
         lineHeight: 1.55,
         outline: "none",
         resize: "vertical",
-        background: focused ? "#fff" : colors.fieldBg,
+        background: disabled ? colors.panel : focused ? "#fff" : colors.fieldBg,
+        cursor: disabled ? "default" : "text",
       }}
     />
   );

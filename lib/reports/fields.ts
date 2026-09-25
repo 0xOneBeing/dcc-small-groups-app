@@ -94,7 +94,7 @@ export const REPORT_STEPS: ReportStep[] = [
   },
   {
     category: "Comments",
-    hint: "Whether the meeting held, the offering currency, and anything worth recording.",
+    hint: "The offering currency and anything else worth recording.",
     fields: [],
   },
 ];
