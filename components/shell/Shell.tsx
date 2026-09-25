@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
-import { Sidebar } from "./Sidebar";
+import { AppSidebar } from "./AppSidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { AppArea } from "@/lib/auth/roles";
 
 /**
- * Shared app chrome for every authenticated route group. Below 820px the
- * sidebar collapses into a horizontally scrolling strip via CSS in
- * globals.css (see `.dcc-sidebar`), and the shell goes full-bleed.
+ * Shared app chrome for every authenticated route group, built on shadcn's
+ * sidebar primitive (`components/ui/sidebar.tsx`). Below the 768px breakpoint
+ * (`hooks/use-mobile.ts`) the sidebar automatically becomes an off-canvas
+ * sheet instead of squeezing the page; on desktop it collapses to an icon
+ * rail rather than disappearing.
+ *
+ * There is a single header: each page's own `PageHeader` (in `components/ui.tsx`)
+ * now also hosts the `SidebarTrigger` as its first element and is the thing
+ * that stays pinned while the page scrolls — there's no separate site-wide
+ * header bar above it.
  */
 export function Shell({
   area,
@@ -21,9 +29,9 @@ export function Shell({
   children: ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#F7F8FA" }} className="dcc-shell">
-      <Sidebar area={area} userName={userName} userRoleLabel={userRoleLabel} badges={badges} />
-      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
-    </div>
+    <SidebarProvider>
+      <AppSidebar area={area} userName={userName} userRoleLabel={userRoleLabel} badges={badges} />
+      <SidebarInset>{children}</SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -4,12 +4,48 @@ import { useState } from "react";
 import { PageHeader, Button } from "@/components/ui";
 import { colors, mono } from "@/lib/tokens";
 import { lastClosedSundays } from "@/lib/dates";
-import { useDashboardExport } from "@/hooks/api/dashboard";
+import { useDashboardExport, useNonSubmitters } from "@/hooks/api/dashboard";
+import type { NonSubmitterRow } from "@/lib/api/types";
 import { notify } from "@/lib/toast";
-import { SectionCard } from "@/components/coordinator/kit";
+import { SectionCard, ServiceDatePicker, defaultServiceDate } from "@/components/coordinator/kit";
 
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function csvField(value: unknown): string {
+  const s = value == null ? "" : String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Built entirely from data already fetched for the Cells page — the export
+ * endpoint itself has no dataset picker (it's one compliance CSV per date
+ * range), so this is generated client-side rather than downloaded.
+ */
+function chronicNonReportersCsv(rows: NonSubmitterRow[]): string {
+  const header = ["Cell", "Code", "Section", "Consecutive misses"];
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    lines.push(
+      [r.cell_name ?? r.cell ?? "", r.cell_code ?? r.code ?? "", r.section ?? "", r.consecutive_misses ?? ""]
+        .map(csvField)
+        .join(","),
+    );
+  }
+  return lines.join("\n");
+}
+
+function downloadTextFile(content: string, filename: string, mimeType = "text/csv"): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function presetRange(key: string): { start: string; end: string } {
@@ -142,11 +178,61 @@ export default function ExportsPage() {
           </div>
         </SectionCard>
 
+        <ChronicExportCard />
+
         <div style={{ fontSize: 11, color: colors.faint2, lineHeight: 1.5 }}>
-          PDF export and the per-dataset picker (follow-ups, approvals) are not available yet — the
-          API exposes a single scoped compliance CSV.
+          PDF export, follow-up outcomes, and a leader directory are not available yet — the API
+          has no endpoint for any of those datasets.
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A second, narrower export: chronic non-reporters for one Sunday. Unlike the
+ * compliance export above, this doesn't call `orgDashboardExport` — it reuses
+ * the same non-submitters data the Cells page shows and builds the CSV in the
+ * browser, since the API has no per-dataset export parameter.
+ */
+function ChronicExportCard() {
+  const [serviceDate, setServiceDate] = useState(defaultServiceDate);
+  const nonSubmitters = useNonSubmitters({ serviceDate, chronic: true });
+  const rows = nonSubmitters.data ?? [];
+
+  function run() {
+    if (rows.length === 0) {
+      notify.error("No chronic non-reporters for this Sunday");
+      return;
+    }
+    downloadTextFile(chronicNonReportersCsv(rows), `dcc-chronic-non-reporters-${serviceDate}.csv`);
+    notify.success("Export downloaded");
+  }
+
+  return (
+    <SectionCard
+      title="Chronic non-reporters"
+      sub="Cells that have missed 3+ consecutive Sundays, as of the selected Sunday"
+      right={<ServiceDatePicker value={serviceDate} onChange={setServiceDate} />}
+    >
+      <div style={{ padding: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 12.5, color: colors.muted }}>
+          {nonSubmitters.isLoading
+            ? "Loading…"
+            : nonSubmitters.isError
+              ? `Could not load: ${nonSubmitters.error.message}`
+              : `${rows.length} cell${rows.length === 1 ? "" : "s"} in this list`}
+        </div>
+        <Button
+          variant="secondary"
+          onClick={run}
+          disabled={nonSubmitters.isLoading || nonSubmitters.isError}
+          padding="8px 14px"
+          fontSize={12.5}
+        >
+          Download CSV
+        </Button>
+      </div>
+    </SectionCard>
   );
 }

@@ -3,6 +3,7 @@
 import { CSSProperties, ReactNode, useState } from "react";
 import Link from "next/link";
 import { colors } from "@/lib/tokens";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function TextInput({
   value,
@@ -101,12 +102,14 @@ export function TextArea({
   placeholder,
   minHeight = 150,
   fontSize = 14,
+  disabled = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   minHeight?: number;
   fontSize?: number;
+  disabled?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -116,6 +119,7 @@ export function TextArea({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       placeholder={placeholder}
+      disabled={disabled}
       style={{
         width: "100%",
         minHeight,
@@ -126,7 +130,8 @@ export function TextArea({
         lineHeight: 1.55,
         outline: "none",
         resize: "vertical",
-        background: focused ? "#fff" : colors.fieldBg,
+        background: disabled ? colors.panel : focused ? "#fff" : colors.fieldBg,
+        cursor: disabled ? "default" : "text",
       }}
     />
   );
@@ -303,6 +308,17 @@ export function Card({ children, style }: { children: ReactNode; style?: CSSProp
   );
 }
 
+/**
+ * The one header every authenticated page renders as its first element.
+ * `position: sticky` (not `fixed`) is deliberate: this sits inside
+ * `SidebarInset`'s normal document flow, which — because the whole page
+ * scrolls as one document and the sidebar pins itself independently via its
+ * own internal `fixed` positioning — is what keeps the header glued to the
+ * viewport top on scroll *without* also having to track the sidebar's
+ * expanded/collapsed/mobile width to avoid overlapping it. A true `fixed`
+ * header would need that width tracked by hand; sticky gets it for free
+ * because it never leaves `SidebarInset`'s box in the first place.
+ */
 export function PageHeader({
   eyebrow,
   title,
@@ -315,14 +331,36 @@ export function PageHeader({
   right?: ReactNode;
 }) {
   return (
-    <div style={{ background: "#fff", borderBottom: `1px solid ${colors.border}`, padding: "22px 28px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
-        <div>
-          {eyebrow && <div style={{ fontSize: 11.5, color: colors.faint, marginBottom: 6 }}>{eyebrow}</div>}
-          <div style={{ fontSize: 25, fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1.15 }}>{title}</div>
-          {sub && <div style={{ fontSize: 13, color: colors.muted, marginTop: 5 }}>{sub}</div>}
+    <div
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 20,
+        background: "#fff",
+        borderBottom: `1px solid ${colors.border}`,
+        padding: "16px 28px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <SidebarTrigger className="-ml-1" />
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 20,
+            flexWrap: "wrap",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <div>
+            {eyebrow && <div style={{ fontSize: 11.5, color: colors.faint, marginBottom: 6 }}>{eyebrow}</div>}
+            <div style={{ fontSize: 25, fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1.15 }}>{title}</div>
+            {sub && <div style={{ fontSize: 13, color: colors.muted, marginTop: 5 }}>{sub}</div>}
+          </div>
+          {right && <div style={{ display: "flex", gap: 9, alignItems: "center", flexShrink: 0 }}>{right}</div>}
         </div>
-        {right && <div style={{ display: "flex", gap: 9, alignItems: "center", flexShrink: 0 }}>{right}</div>}
       </div>
     </div>
   );
