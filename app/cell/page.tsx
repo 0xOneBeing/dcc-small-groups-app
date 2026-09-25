@@ -111,6 +111,19 @@ export default function MyCellPage() {
             <SubmissionTable rows={reports.slice(0, 8)} />
           )}
         </Card>
+
+        <Card style={{ padding: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Attendance, last 8 Sundays</div>
+          {mine.isLoading ? (
+            <Skeleton className="mt-4 h-24 w-full" />
+          ) : reports.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: colors.faint, marginTop: 8 }}>
+              No attendance recorded yet.
+            </div>
+          ) : (
+            <AttendanceStrip reports={reports.slice(0, 8)} />
+          )}
+        </Card>
       </div>
     </>
   );
@@ -220,6 +233,46 @@ function StatCard({ label, value, loading }: { label: string; value: string; loa
       )}
       <div style={{ fontSize: 11.5, color: colors.muted, marginTop: 4 }}>{label}</div>
     </Card>
+  );
+}
+
+/** Oldest-to-newest attendance bars, the most recent Sunday picked out in red. */
+function AttendanceStrip({ reports }: { reports: SundayReport[] }) {
+  const chronological = [...reports].reverse();
+  const max = Math.max(1, ...chronological.map((r) => r.members_present ?? 0));
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 110 }}>
+        {chronological.map((r, i) => {
+          const value = r.members_present ?? 0;
+          const isLatest = i === chronological.length - 1;
+          return (
+            <div
+              key={r.id}
+              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 600, fontFamily: mono, color: isLatest ? colors.red : colors.muted }}>
+                {value}
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 34,
+                  borderRadius: "4px 4px 0 0",
+                  minHeight: 3,
+                  height: `${Math.max(4, (value / max) * 64)}px`,
+                  background: isLatest ? colors.red : colors.hairline,
+                }}
+              />
+              <div style={{ fontSize: 10, color: colors.faint2, whiteSpace: "nowrap" }}>
+                {r.service_date ? formatServiceDate(new Date(r.service_date)) : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

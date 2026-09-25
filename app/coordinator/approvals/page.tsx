@@ -80,6 +80,11 @@ export default function ApprovalsPage() {
             <SectionCard
               title="Queue"
               sub={queue.isLoading ? "Loading…" : `${reports.length} pending`}
+              right={
+                capabilities.canApprove && reports.length > 0 ? (
+                  <BulkApproveButton reports={reports} />
+                ) : undefined
+              }
             >
               {queue.isLoading ? (
                 <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
@@ -141,9 +146,56 @@ export default function ApprovalsPage() {
           </div>
         )}
 
+        {capabilities.canApprove && reports.length > 0 && (
+          <div style={{ fontSize: 11, color: colors.faint2, lineHeight: 1.5 }}>
+            &ldquo;Approve all&rdquo; approves everything currently in the queue &mdash; there is no
+            attendance-anomaly screening yet (that needs a per-cell report history the API does not
+            expose), so review the list before using it.
+          </div>
+        )}
+
         {capabilities.canApprove && <ApprovalSettingsCard />}
       </div>
     </>
+  );
+}
+
+/**
+ * Approves every report currently in the queue, one request at a time.
+ *
+ * The mock distinguishes "clean" reports from ones flagged for an attendance
+ * anomaly (needs a per-cell report history the API doesn't expose — see
+ * `/coordinator` page notes). Without that signal this approves everything
+ * listed, unscreened — so it's deliberately not labelled "clean".
+ */
+function BulkApproveButton({ reports }: { reports: SundayReport[] }) {
+  const approve = useApproveReport();
+  const [running, setRunning] = useState(false);
+
+  async function run() {
+    setRunning(true);
+    let ok = 0;
+    let failed = 0;
+    for (const r of reports) {
+      try {
+        await approve.mutateAsync({ id: r.id });
+        ok++;
+      } catch {
+        failed++;
+      }
+    }
+    setRunning(false);
+    if (failed === 0) {
+      notify.success(`Approved ${ok} report${ok === 1 ? "" : "s"}`);
+    } else {
+      notify.error(`${failed} of ${ok + failed} approvals failed`, "Some reports could not be approved");
+    }
+  }
+
+  return (
+    <Button variant="secondary" onClick={run} disabled={running} padding="7px 12px" fontSize={12}>
+      {running ? "Approving…" : `Approve all (${reports.length})`}
+    </Button>
   );
 }
 

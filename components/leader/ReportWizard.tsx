@@ -13,8 +13,15 @@ import {
 } from "@/lib/reports/fields";
 import { formatServiceDate } from "@/lib/dates";
 import { useCreateReport, useUpdateReport } from "@/hooks/api/reports";
+import { useApprovalSettings } from "@/hooks/api/approvals";
 import { ApiError } from "@/lib/api/errors";
 import type { SundayReport } from "@/lib/api/types";
+
+/** Whole/half-hour phrasing for the fallback-approval window ("36 hours", "1.5 hours"). */
+function formatHours(seconds: number): string {
+  const hours = Math.round((seconds / 3600) * 10) / 10;
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
 
 type Figures = Partial<Record<FigureKey, number | null>>;
 
@@ -50,6 +57,14 @@ export function ReportWizard({
   const createReport = useCreateReport();
   const updateReport = useUpdateReport(existing?.id ?? "");
   const pending = createReport.isPending || updateReport.isPending;
+
+  // Best-effort: some roles may not have access to this endpoint. Failing
+  // silently just means the escalation note doesn't render — no error UI.
+  const approvalSettings = useApprovalSettings();
+  const escalationHours =
+    !approvalSettings.isError && approvalSettings.data?.approval_interval != null
+      ? formatHours(approvalSettings.data.approval_interval)
+      : null;
 
   const runningTotal = useMemo(
     () => ALL_FIGURE_KEYS.reduce((sum, k) => sum + (values[k] ?? 0), 0),
@@ -316,6 +331,12 @@ export function ReportWizard({
         <div style={{ fontSize: 11.5, color: colors.faint2 }}>
           For {formatServiceDate(new Date(serviceDate))} · nothing is saved until you submit
         </div>
+        {escalationHours && (
+          <div style={{ fontSize: 11.5, color: colors.faint2, marginTop: 8, lineHeight: 1.5 }}>
+            After you submit, your Section Leader has {escalationHours} to review it before an
+            Area or Zonal Coordinator can step in.
+          </div>
+        )}
       </Card>
     </div>
   );
