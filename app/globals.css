@@ -67,14 +67,16 @@
   --border: #e9ecf1;
   --input: #e3e7ec;
   --ring: #b01e28;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  /* Mirrors the red / ink palette above — the shadcn sidebar block ships
+     generic zinc/blue defaults here, which read as a different app. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #12161c;
+  --sidebar-primary: #b01e28;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fbeeef;
+  --sidebar-accent-foreground: #b01e28;
+  --sidebar-border: #e9ecf1;
+  --sidebar-ring: #b01e28;
 }
 
 /* Tailwind v4 defaults `border-color` to `currentColor`; shadcn primitives
@@ -133,45 +135,6 @@ select {
   border-radius: 8px;
   border: 3px solid transparent;
   background-clip: content-box;
-}
-
-/* Below 820px the sidebar becomes a horizontally scrolling strip at the
-   top and the shell goes full-bleed, per the mobile-first layout spec. */
-@media (max-width: 820px) {
-  .dcc-shell {
-    flex-direction: column;
-  }
-  .dcc-sidebar {
-    width: 100%;
-    min-height: 0;
-    flex-direction: row;
-    align-items: center;
-    padding: 10px 12px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-right: none;
-    border-bottom: 1px solid #e9ecf1;
-  }
-  .dcc-sidebar > div:first-child {
-    display: none;
-  }
-  .dcc-sidebar-items {
-    flex-direction: row !important;
-    gap: 4px !important;
-  }
-  .dcc-sidebar-items a {
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .dcc-user-footer {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
-    flex-shrink: 0;
-  }
-  .dcc-user-meta {
-    display: none;
-  }
 }
 
 .dcc-table-scroll {
