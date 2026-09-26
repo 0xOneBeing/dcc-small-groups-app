@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader, Card, LinkButton } from "@/components/ui";
 import {
   Table,
@@ -10,11 +10,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { colors, mono } from "@/lib/tokens";
-import { useMyReports } from "@/hooks/api/reports";
+import { useMyReports, useMyReportsPage } from "@/hooks/api/reports";
 import { mostRecentSunday, formatServiceDate } from "@/lib/dates";
-import type { ApprovalStatus, SundayReport } from "@/lib/api/types";
+import { ReportDetailDialog } from "@/components/leader/ReportDetailDialog";
+import { StatusPill } from "@/components/leader/StatusPill";
+import type { SundayReport } from "@/lib/api/types";
 
 const naira = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -34,7 +39,52 @@ function followUpsOf(r: SundayReport): number {
 
 export default function MyCellPage() {
   const serviceDate = useMemo(() => mostRecentSunday(new Date()).toISOString().slice(0, 10), []);
+  // Every page, merged — feeds the stat cards, streak and attendance chart, which
+  // all need the whole history. Loads in the background; the table doesn't wait on it.
   const mine = useMyReports();
+  // Track the id, not the object, so the open dialog stays current across refetches.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // The table itself shows exactly one server page; Next / Previous request
+  // `reports/mine/?page=N` for that page.
+  const [page, setPage] = useState(1);
+  const [knownPageSize, setKnownPageSize] = useState<number | null>(null);
+  // Service-date filter (YYYY-MM-DD, "" = none) — sent to the API as `?date=`.
+  const [dateFilter, setDateFilter] = useState("");
+  // What's typed in the picker. Kept apart from `dateFilter` because a native date
+  // input reports a "valid" date while the year is still being typed (0002-…, 0020-…).
+  const [dateDraft, setDateDraft] = useState("");
+  const pageQuery = useMyReportsPage(page, dateFilter || undefined);
+  const pageRows = pageQuery.data?.results ?? [];
+  const totalCount = pageQuery.data?.count ?? 0;
+  // The API doesn't state its page size; a page that has a `next` is a full page,
+  // so its length is the size. Remembered on navigation so later pages can use it.
+  const pageSize = knownPageSize ?? (pageRows.length || 1);
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const rangeStart = (page - 1) * pageSize + 1;
+  const rangeEnd = rangeStart + pageRows.length - 1;
+  const pageBusy = pageQuery.isFetching;
+
+  function applyDateFilter(value: string) {
+    setDateFilter(value);
+    setPage(1); // a different result set — start from its first page
+  }
+
+  function onDateInput(value: string) {
+    setDateDraft(value);
+    if (value === "") applyDateFilter("");
+    else if (value >= "2000-01-01" && value <= "2100-12-31") applyDateFilter(value);
+  }
+
+  function clearDateFilter() {
+    setDateDraft("");
+    applyDateFilter("");
+  }
+
+  function goToPage(target: number) {
+    if (pageQuery.data?.next && pageRows.length > 0) setKnownPageSize(pageRows.length);
+    setPage(target);
+  }
 
   const reports = useMemo(
     () =>
@@ -44,6 +94,10 @@ export default function MyCellPage() {
     [mine.data],
   );
   const current = reports.find((r) => r.service_date === serviceDate) ?? null;
+  // A row may be clicked before the all-pages query has finished, so look on the
+  // visible page first.
+  const selected =
+    pageRows.find((r) => r.id === selectedId) ?? reports.find((r) => r.id === selectedId) ?? null;
 
   // Consecutive most-recent weeks that were reported (any status other than a miss).
   const streak = useMemo(() => {
@@ -80,7 +134,11 @@ export default function MyCellPage() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 16 }}>
-          <StatCard label="Total submitted" value={String(reports.length)} loading={mine.isLoading} />
+          <StatCard
+            label="Total submitted"
+            value={String(dateFilter ? reports.length : (pageQuery.data?.count ?? reports.length))}
+            loading={dateFilter ? mine.isLoading : !pageQuery.data && mine.isLoading}
+          />
           <StatCard label="Approved" value={String(stats.approved)} loading={mine.isLoading} />
           <StatCard label="Pending review" value={String(stats.pending)} loading={mine.isLoading} />
           <StatCard
@@ -102,13 +160,107 @@ export default function MyCellPage() {
         </div>
 
         <Card style={{ padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Submission record — most recent</div>
-          {mine.isLoading ? (
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Submission record</div>
+            {pageRows.length > 0 && (
+              <div style={{ fontSize: 11.5, color: colors.faint }}>Select a row for full details</div>
+            )}
+          </div>
+          {(totalCount > 0 || dateFilter) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+              <label htmlFor="report-date-filter" style={{ fontSize: 12, color: colors.muted }}>
+                Service date
+              </label>
+              <Input
+                id="report-date-filter"
+                type="date"
+                value={dateDraft}
+                onChange={(e) => onDateInput(e.target.value)}
+                className="h-8 w-auto text-sm"
+              />
+              {(dateFilter || dateDraft) && (
+                <Button variant="ghost" size="sm" onClick={clearDateFilter}>
+                  <X />
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
+          {pageQuery.isLoading ? (
             <SubmissionTableSkeleton />
-          ) : reports.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: colors.faint }}>No reports submitted yet.</div>
+          ) : pageQuery.isError && !pageQuery.data ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 12.5, color: colors.red }}>
+                Could not load page {page}: {pageQuery.error.message}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => pageQuery.refetch()}>
+                Retry
+              </Button>
+              {page > 1 && (
+                <Button variant="outline" size="sm" onClick={() => setPage(page - 1)}>
+                  Back
+                </Button>
+              )}
+              {dateFilter && (
+                <Button variant="outline" size="sm" onClick={clearDateFilter}>
+                  Clear filter
+                </Button>
+              )}
+            </div>
+          ) : totalCount === 0 ? (
+            <div style={{ fontSize: 12.5, color: colors.faint }}>
+              {dateFilter
+                ? `No report found for ${dateFilter}.`
+                : "No reports submitted yet."}
+            </div>
           ) : (
-            <SubmissionTable rows={reports.slice(0, 8)} />
+            <>
+              {/* While the next page loads, the previous one stays up, dimmed. */}
+              <div style={{ opacity: pageQuery.isPlaceholderData ? 0.55 : 1, transition: "opacity 120ms" }}>
+                <SubmissionTable rows={pageRows} onSelect={(r) => setSelectedId(r.id)} />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginTop: 14,
+                }}
+              >
+                <div style={{ fontSize: 12, color: colors.muted }}>
+                  {pageQuery.isPlaceholderData
+                    ? `Loading page ${page}…`
+                    : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}${dateFilter ? " for this date" : ""}`}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(page - 1)}
+                    disabled={page <= 1 || pageBusy}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft />
+                    Previous
+                  </Button>
+                  <span style={{ fontSize: 12, color: colors.muted, minWidth: 74, textAlign: "center" }}>
+                    Page {page} of {pageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(page + 1)}
+                    disabled={!pageQuery.data?.next || pageBusy}
+                    aria-label="Next page"
+                  >
+                    Next
+                    <ChevronRight />
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </Card>
 
@@ -125,6 +277,8 @@ export default function MyCellPage() {
           )}
         </Card>
       </div>
+
+      <ReportDetailDialog report={selected} onOpenChange={(open) => !open && setSelectedId(null)} />
     </>
   );
 }
@@ -158,13 +312,26 @@ function HeaderRow() {
   );
 }
 
-function SubmissionTable({ rows }: { rows: SundayReport[] }) {
+function SubmissionTable({ rows, onSelect }: { rows: SundayReport[]; onSelect: (r: SundayReport) => void }) {
   return (
     <Table>
       <HeaderRow />
       <TableBody>
         {rows.map((r) => (
-          <TableRow key={r.id}>
+          <TableRow
+            key={r.id}
+            tabIndex={0}
+            aria-haspopup="dialog"
+            aria-label={`View details for ${r.service_date ?? "report"}`}
+            className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none"
+            onClick={() => onSelect(r)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(r);
+              }
+            }}
+          >
             <TableCell className="font-medium">
               {r.service_date ? formatServiceDate(new Date(r.service_date)) : "—"}
             </TableCell>
@@ -273,21 +440,6 @@ function AttendanceStrip({ reports }: { reports: SundayReport[] }) {
         })}
       </div>
     </div>
-  );
-}
-
-function StatusPill({ status }: { status: ApprovalStatus }) {
-  const map: Record<ApprovalStatus, { label: string; bg: string; fg: string }> = {
-    APPROVED: { label: "Approved", bg: colors.greenSoft, fg: colors.green },
-    PENDING: { label: "Pending", bg: colors.amberSoft, fg: colors.amber },
-    REJECTED: { label: "Sent back", bg: colors.redSoft, fg: colors.red },
-    DELETED: { label: "Deleted", bg: colors.chipGrey, fg: colors.muted },
-  };
-  const t = map[status];
-  return (
-    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: t.bg, color: t.fg }}>
-      {t.label}
-    </span>
   );
 }
 

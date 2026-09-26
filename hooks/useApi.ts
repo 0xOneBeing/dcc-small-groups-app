@@ -37,7 +37,7 @@ import {
 import { useCallback } from "react";
 import { api, type ApiCallOptions } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
-import { unwrapData } from "@/lib/api/normalize";
+import { asArray, unwrapData } from "@/lib/api/normalize";
 import type { QueryParams } from "@/lib/api/http";
 import type { Paginated } from "@/lib/api/types";
 
@@ -57,6 +57,8 @@ export const queryKeys = {
     all: ["reports"] as const,
     list: (params?: QueryParams) => ["reports", "list", params ?? {}] as const,
     mine: ["reports", "mine"] as const,
+    /** One server page of `reports/mine/`. Shares the `mine` prefix so invalidating `reports.all` refreshes it too. */
+    minePage: (page: number, date?: string) => ["reports", "mine", "page", page, date ?? null] as const,
     detail: (id: string) => ["reports", "detail", id] as const,
   },
   approvals: {
@@ -155,6 +157,47 @@ export function useApiInfiniteQuery<TItem>(
       }),
     getNextPageParam: (lastPage) => pageFromUrl(lastPage.next),
     getPreviousPageParam: (firstPage) => pageFromUrl(firstPage.previous),
+    ...query,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// useApiAllPagesQuery — fetch *every* page of a paginated list into one array
+// ---------------------------------------------------------------------------
+
+/**
+ * For lists that are small enough to hold in memory and that the UI derives
+ * totals from (counts, streaks, averages) — those are wrong if only page 1 is
+ * loaded. Follows `next` until it runs out, and also accepts an endpoint that
+ * returns a bare array. `maxPages` is a runaway guard, not an expected limit.
+ */
+export function useApiAllPagesQuery<TItem>(
+  key: QueryKey,
+  path: string,
+  options: {
+    params?: QueryParams;
+    maxPages?: number;
+    query?: Omit<UseQueryOptions<TItem[], ApiError, TItem[], QueryKey>, "queryKey" | "queryFn">;
+  } = {},
+): UseQueryResult<TItem[], ApiError> {
+  const { params, maxPages = 50, query } = options;
+
+  return useQuery<TItem[], ApiError, TItem[], QueryKey>({
+    queryKey: key,
+    queryFn: async ({ signal }) => {
+      const items: TItem[] = [];
+      let page: number | undefined = 1;
+      for (let i = 0; page !== undefined && i < maxPages; i++) {
+        const body: Paginated<TItem> | TItem[] = await api.get<Paginated<TItem> | TItem[]>(path, {
+          query: { ...params, page },
+          signal,
+        });
+        items.push(...asArray<TItem>(body));
+        const next: number | undefined = Array.isArray(body) ? undefined : pageFromUrl(body.next);
+        page = next !== undefined && next > page ? next : undefined;
+      }
+      return items;
+    },
     ...query,
   });
 }

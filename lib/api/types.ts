@@ -146,14 +146,67 @@ export interface SundayReportFigures {
   comment: string;
 }
 
+/** A leader / user as embedded in a report's `cell` tree. */
+export interface ReportUser {
+  id: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string | null;
+  status?: string;
+  last_login?: string | null;
+  code?: string | null;
+  email_verified?: boolean;
+  [key: string]: unknown;
+}
+
+/** Fields shared by every level of the hierarchy embedded in a report. */
+export interface ReportOrgUnit {
+  id: string;
+  name?: string;
+  code?: string;
+  status?: string;
+  deleted_at?: string | null;
+  leader?: ReportUser | null;
+  [key: string]: unknown;
+}
+
+export type ReportRegion = ReportOrgUnit;
+export interface ReportDistrict extends ReportOrgUnit {
+  region?: ReportRegion | null;
+}
+export interface ReportZone extends ReportOrgUnit {
+  district?: ReportDistrict | null;
+}
+export interface ReportArea extends ReportOrgUnit {
+  zone?: ReportZone | null;
+}
+export interface ReportSection extends ReportOrgUnit {
+  area?: ReportArea | null;
+}
+
+/** The cell a report belongs to, with its full parent chain (Section → Area → Zone → District → Region). */
+export interface ReportCell extends ReportOrgUnit {
+  section?: ReportSection | null;
+  cell_id?: string | null;
+  cell_type?: string;
+  address?: string | null;
+  longitude?: number | null;
+  latitude?: number | null;
+}
+
 /**
  * A Sunday report row. Fields are ordered as the live API returns them; the
  * schema also lists `status` / `deleted_at` / `meta`, which the endpoints do
  * not actually send back, so they are optional here.
+ *
+ * `cell` is a UUID string on some endpoints (create / approvals queue) and the
+ * full nested {@link ReportCell} on `reports/mine/`, so it's a union.
  */
 export interface SundayReport extends Partial<SundayReportFigures> {
   id: string;
-  cell: string | null;
+  cell: string | ReportCell | null;
   service_date: string | null; // YYYY-MM-DD, a Sunday
   approval_status: ApprovalStatus;
   approved_by: string | null;

@@ -11,9 +11,9 @@ import type {
   UpdateReportInput,
   WhatsAppReportInput,
 } from "@/lib/api/types";
-import { asArray } from "@/lib/api/normalize";
 import {
   queryKeys,
+  useApiAllPagesQuery,
   useApiInfiniteQuery,
   useApiMutation,
   useApiQuery,
@@ -38,11 +38,37 @@ export function useInfiniteReports(params?: QueryParams) {
   );
 }
 
-/** Reports submitted by the current Cell Leader. The API returns a bare array here. */
+/**
+ * Every report submitted by the current Cell Leader. `reports/mine/` is
+ * paginated (`count` / `next` / `results`), and the dashboard derives totals,
+ * streaks and averages from this list — so all pages are fetched and merged,
+ * not just the first.
+ */
 export function useMyReports() {
-  return useApiQuery<unknown, SundayReport[]>(queryKeys.reports.mine, API_ROUTES.myReports, {
-    select: (d) => asArray<SundayReport>(d),
-  });
+  return useApiAllPagesQuery<SundayReport>(queryKeys.reports.mine, API_ROUTES.myReports);
+}
+
+/**
+ * Exactly one server page of the caller's reports (`reports/mine/?page=N`) —
+ * what the Submission record table shows. The previous page stays on screen
+ * while the next one loads. Order is whatever the API returns (newest
+ * submitted first), so the table is not re-sorted client-side.
+ *
+ * `date` (YYYY-MM-DD) is the API's only filter here: it narrows the list to
+ * reports for that service date.
+ */
+export function useMyReportsPage(page: number, date?: string) {
+  return useApiQuery<Paginated<SundayReport> | SundayReport[], Paginated<SundayReport>>(
+    queryKeys.reports.minePage(page, date),
+    API_ROUTES.myReports,
+    {
+      params: { page, ...(date ? { date } : {}) },
+      placeholderData: (prev) => prev,
+      // Tolerate an unpaginated (bare array) response.
+      select: (d) =>
+        Array.isArray(d) ? { count: d.length, next: null, previous: null, results: d } : d,
+    },
+  );
 }
 
 export function useReport(id: string | null) {
