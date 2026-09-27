@@ -20,6 +20,10 @@ import {
   ServiceDatePicker,
   StatTile,
   defaultServiceDate,
+  nonSubmitterCode,
+  nonSubmitterIsChronic,
+  nonSubmitterKey,
+  nonSubmitterName,
 } from "@/components/coordinator/kit";
 
 /**
@@ -35,23 +39,23 @@ export default function CellsPage() {
 
   const dash = useOrgDashboard(serviceDate);
   const nonSubmitters = useNonSubmitters({ serviceDate, chronic: chronicOnly });
+  // A separate always-chronic query for the stat tile: `chronic` isn't a
+  // documented per-row field on non-submitters/, so when the table itself
+  // isn't chronic-filtered there's no reliable way to count chronic rows out
+  // of the full list.
+  const chronicCount = useNonSubmitters({ serviceDate, chronic: true });
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return [...(nonSubmitters.data ?? [])]
-      .filter((r) => {
-        if (!q) return true;
-        return `${r.cell_name ?? ""} ${r.cell ?? ""} ${r.section ?? ""}`.toLowerCase().includes(q);
-      })
-      .sort((a, b) => (b.consecutive_misses ?? 0) - (a.consecutive_misses ?? 0));
+    return (nonSubmitters.data ?? []).filter((r) => {
+      if (!q) return true;
+      return `${nonSubmitterName(r)} ${nonSubmitterCode(r)}`.toLowerCase().includes(q);
+    });
   }, [nonSubmitters.data, query]);
 
   const total = dash.data?.total_cells ?? 0;
   const submitted = dash.data?.submitted_cells ?? 0;
   const notSubmitted = dash.data?.missing_cells?.length ?? Math.max(0, total - submitted);
-  const chronicCount = (nonSubmitters.data ?? []).filter(
-    (r) => r.chronic ?? (r.consecutive_misses ?? 0) >= 3,
-  ).length;
 
   return (
     <>
@@ -72,9 +76,9 @@ export default function CellsPage() {
             <StatTile label="Not submitted" value={notSubmitted} color={colors.red} loading={dash.isLoading} />
             <StatTile
               label="Chronic"
-              value={chronicCount}
+              value={chronicCount.data?.length ?? 0}
               color={colors.red}
-              loading={nonSubmitters.isLoading}
+              loading={chronicCount.isLoading}
             />
           </div>
         )}
@@ -94,7 +98,7 @@ export default function CellsPage() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search cell, code or section"
+                  placeholder="Search cell or code"
                   style={{
                     minHeight: 34,
                     width: 200,
@@ -142,7 +146,7 @@ export default function CellsPage() {
                     : "Every cell in scope reported for this Sunday."}
               </div>
             ) : (
-              <CellsTable rows={rows} />
+              <CellsTable rows={rows} chronicView={chronicOnly} />
             )}
           </SectionCard>
         )}
@@ -158,31 +162,25 @@ export default function CellsPage() {
   );
 }
 
-const COLUMNS = ["Cell", "Code", "Section", "Consecutive misses", "Status"] as const;
+const COLUMNS = ["Cell", "Code", "Status"] as const;
 
-function CellsTable({ rows }: { rows: NonSubmitterRow[] }) {
+function CellsTable({ rows, chronicView }: { rows: NonSubmitterRow[]; chronicView: boolean }) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           {COLUMNS.map((c) => (
-            <TableHead key={c} className={c === "Consecutive misses" ? "text-right" : undefined}>
-              {c}
-            </TableHead>
+            <TableHead key={c}>{c}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((r, i) => {
-          const misses = r.consecutive_misses ?? 0;
-          const chronic = r.chronic ?? misses >= 3;
-          const code = (r.cell_code as string) ?? (r.code as string) ?? "—";
+          const chronic = nonSubmitterIsChronic(r, chronicView);
           return (
-            <TableRow key={(r.cell as string) ?? i}>
-              <TableCell className="font-medium">{r.cell_name ?? r.cell ?? "—"}</TableCell>
-              <TableCell className="text-muted-foreground tabular-nums">{code}</TableCell>
-              <TableCell className="text-muted-foreground">{(r.section as string) ?? "—"}</TableCell>
-              <TableCell className="text-right tabular-nums">{misses || "—"}</TableCell>
+            <TableRow key={nonSubmitterKey(r, i)}>
+              <TableCell className="font-medium">{nonSubmitterName(r)}</TableCell>
+              <TableCell className="text-muted-foreground tabular-nums">{nonSubmitterCode(r)}</TableCell>
               <TableCell>
                 <span
                   style={{
@@ -211,9 +209,7 @@ function CellsSkeleton() {
       <TableHeader>
         <TableRow>
           {COLUMNS.map((c) => (
-            <TableHead key={c} className={c === "Consecutive misses" ? "text-right" : undefined}>
-              {c}
-            </TableHead>
+            <TableHead key={c}>{c}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
@@ -222,8 +218,6 @@ function CellsSkeleton() {
           <TableRow key={i}>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
             <TableCell><Skeleton className="h-4 w-14" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           </TableRow>
         ))}

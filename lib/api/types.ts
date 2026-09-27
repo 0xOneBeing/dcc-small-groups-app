@@ -287,12 +287,28 @@ export interface ComplianceScope extends ComplianceSummary {
   scope: Record<string, unknown>;
 }
 
-/** `GET /api/v1/organization/dashboard/non-submitters/` — published as bare `object`; refine against real data. */
+/**
+ * `GET /api/v1/organization/dashboard/non-submitters/`. The backend's own API
+ * reference documents each row as just `{id, name, code}` — thinner than the
+ * `cell_name`/`section`/`consecutive_misses`/`chronic` shape this was first
+ * built against (from the OpenAPI schema's bare-`object` placeholder, which
+ * has been wrong before). Both sets of keys are kept: `id`/`name`/`code` are
+ * the documented ones and should be read first; the others stay as a
+ * fallback in case the live payload carries more than the doc's example.
+ */
 export interface NonSubmitterRow {
+  id?: string;
+  name?: string;
+  code?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   cell?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   cell_name?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   section?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   consecutive_misses?: number;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   chronic?: boolean;
   [key: string]: unknown;
 }

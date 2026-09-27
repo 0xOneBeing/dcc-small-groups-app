@@ -33,7 +33,7 @@ export async function getServerSession(): Promise<ServerSession> {
 
   if (refresh) {
     try {
-      const next = await refreshTokens(refresh);
+      const next = await refreshTokens(refresh, access);
       return { authenticated: true, user, claims: decodeJwt<AccessTokenClaims>(next.access) };
     } catch {
       return { authenticated: false, user: null, claims: null };

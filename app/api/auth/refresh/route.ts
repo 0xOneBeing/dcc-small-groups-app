@@ -20,13 +20,13 @@ import type { AccessTokenClaims } from "@/lib/api/types";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const { refresh } = await readTokens();
+  const { access, refresh } = await readTokens();
   if (!refresh) {
     return NextResponse.json({ authenticated: false, detail: "No refresh token." }, { status: 401 });
   }
 
   try {
-    const next = await refreshTokens(refresh);
+    const next = await refreshTokens(refresh, access);
     const claims = decodeJwt<AccessTokenClaims>(next.access);
     const res = NextResponse.json({
       authenticated: true,

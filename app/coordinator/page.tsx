@@ -28,6 +28,10 @@ import {
   defaultServiceDate,
   deltaFromTrend,
   displayNameFrom,
+  nonSubmitterCode,
+  nonSubmitterIsChronic,
+  nonSubmitterKey,
+  nonSubmitterName,
   formatHours,
 } from "@/components/coordinator/kit";
 
@@ -42,6 +46,10 @@ export default function CompliancePage() {
   const dash = useOrgDashboard(serviceDate);
   const trends = useComplianceTrends(TREND_WEEKS);
   const nonSubmitters = useNonSubmitters({ serviceDate, chronic: chronicOnly });
+  // A separate always-chronic query for the stat tile: `chronic` isn't a
+  // documented per-row field, so when the table itself isn't chronic-filtered
+  // there's no reliable way to count chronic rows out of the full list.
+  const chronicCount = useNonSubmitters({ serviceDate, chronic: true });
   // Best-effort: some roles may not have access to this endpoint; failing
   // silently just drops the escalation-hours line, no error UI.
   const approvalSettings = useApprovalSettings();
@@ -121,10 +129,10 @@ export default function CompliancePage() {
             />
             <StatTile
               label="Chronic non-reporters"
-              value={rows.filter((r) => r.chronic ?? (r.consecutive_misses ?? 0) >= 3).length}
+              value={chronicCount.data?.length ?? 0}
               color={colors.red}
               hint="Missed 3 or more consecutive Sundays."
-              loading={nonSubmitters.isLoading}
+              loading={chronicCount.isLoading}
             />
           </div>
         )}
@@ -174,7 +182,7 @@ export default function CompliancePage() {
               {chronicOnly ? "No chronic non-reporters in scope." : "Every cell in scope reported."}
             </div>
           ) : (
-            <NonSubmitterTable rows={rows} />
+            <NonSubmitterTable rows={rows} chronicView={chronicOnly} />
           )}
         </SectionCard>
 
@@ -188,31 +196,25 @@ export default function CompliancePage() {
   );
 }
 
-const NS_COLUMNS = ["Cell", "Section", "Consecutive misses", "Status"] as const;
+const NS_COLUMNS = ["Cell", "Code", "Status"] as const;
 
-function NonSubmitterTable({ rows }: { rows: NonSubmitterRow[] }) {
+function NonSubmitterTable({ rows, chronicView }: { rows: NonSubmitterRow[]; chronicView: boolean }) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           {NS_COLUMNS.map((c) => (
-            <TableHead key={c} className={c === "Consecutive misses" ? "text-right" : undefined}>
-              {c}
-            </TableHead>
+            <TableHead key={c}>{c}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((r, i) => {
-          const misses = r.consecutive_misses ?? 0;
-          const chronic = r.chronic ?? misses >= 3;
+          const chronic = nonSubmitterIsChronic(r, chronicView);
           return (
-            <TableRow key={(r.cell as string) ?? i}>
-              <TableCell className="font-medium">{r.cell_name ?? r.cell ?? "—"}</TableCell>
-              <TableCell className="text-muted-foreground">
-                {(r.section as string) ?? "—"}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{misses || "—"}</TableCell>
+            <TableRow key={nonSubmitterKey(r, i)}>
+              <TableCell className="font-medium">{nonSubmitterName(r)}</TableCell>
+              <TableCell className="text-muted-foreground tabular-nums">{nonSubmitterCode(r)}</TableCell>
               <TableCell>
                 <span
                   style={{
@@ -241,9 +243,7 @@ function NonSubmitterSkeleton() {
       <TableHeader>
         <TableRow>
           {NS_COLUMNS.map((c) => (
-            <TableHead key={c} className={c === "Consecutive misses" ? "text-right" : undefined}>
-              {c}
-            </TableHead>
+            <TableHead key={c}>{c}</TableHead>
           ))}
         </TableRow>
       </TableHeader>
@@ -251,8 +251,7 @@ function NonSubmitterSkeleton() {
         {Array.from({ length: 4 }).map((_, i) => (
           <TableRow key={i}>
             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-            <TableCell><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-16" /></TableCell>
             <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
           </TableRow>
         ))}

@@ -172,10 +172,22 @@ export function obtainTokens(email: string, password: string): Promise<TokenPair
   });
 }
 
-/** Trade a refresh token for a new access token (and rotated refresh, when enabled). */
-export function refreshTokens(refresh: string): Promise<TokenRefreshResponse> {
+/**
+ * Trade a refresh token for a new access token (and rotated refresh, when
+ * enabled). The backend's API reference marks `/user/refresh/` as requiring
+ * `IsAuthenticated` (not `AllowAny`), which is unusual for a refresh endpoint
+ * — refresh is normally called *because* the access token has expired. We
+ * attach `access` as a bearer token when the caller still has one: thanks to
+ * the 30s skew in `isJwtExpired`, a token already flagged "expired" often has
+ * a few seconds of real validity left, so this can satisfy the requirement in
+ * the common case. It can't help once the access token has been dead for a
+ * while — that scenario needs backend confirmation of what this endpoint
+ * actually requires.
+ */
+export function refreshTokens(refresh: string, access?: string | null): Promise<TokenRefreshResponse> {
   return httpRequest<TokenRefreshResponse>(upstreamUrl(API_ROUTES.tokenRefresh), {
     method: "POST",
     body: { refresh },
+    headers: access ? { Authorization: `Bearer ${access}` } : {},
   });
 }

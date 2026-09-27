@@ -7,7 +7,13 @@ import { lastClosedSundays } from "@/lib/dates";
 import { useDashboardExport, useNonSubmitters } from "@/hooks/api/dashboard";
 import type { NonSubmitterRow } from "@/lib/api/types";
 import { notify } from "@/lib/toast";
-import { SectionCard, ServiceDatePicker, defaultServiceDate } from "@/components/coordinator/kit";
+import {
+  SectionCard,
+  ServiceDatePicker,
+  defaultServiceDate,
+  nonSubmitterCode,
+  nonSubmitterName,
+} from "@/components/coordinator/kit";
 
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -24,14 +30,10 @@ function csvField(value: unknown): string {
  * range), so this is generated client-side rather than downloaded.
  */
 function chronicNonReportersCsv(rows: NonSubmitterRow[]): string {
-  const header = ["Cell", "Code", "Section", "Consecutive misses"];
+  const header = ["Cell", "Code"];
   const lines = [header.join(",")];
   for (const r of rows) {
-    lines.push(
-      [r.cell_name ?? r.cell ?? "", r.cell_code ?? r.code ?? "", r.section ?? "", r.consecutive_misses ?? ""]
-        .map(csvField)
-        .join(","),
-    );
+    lines.push([nonSubmitterName(r), nonSubmitterCode(r)].map(csvField).join(","));
   }
   return lines.join("\n");
 }
