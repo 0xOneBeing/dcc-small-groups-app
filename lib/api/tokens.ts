@@ -24,10 +24,8 @@ import type {
   ApiUser,
   LoginResponse,
   NormalisedLogin,
-  Paginated,
   TokenPair,
   TokenRefreshResponse,
-  UserRole,
 } from "./types";
 
 export function upstreamUrl(path: string): string {
@@ -135,8 +133,13 @@ export async function clearTokens(): Promise<void> {
 /**
  * `POST /api/v1/user/login/` — accepts `email` **or** `cell_code` plus a
  * password; returns `{ message, data: { ...profile, tokens } }`. We normalise
- * it to `{ access, refresh, user }` and best-effort enrich the user's `role`
- * UUID into a `role_name` from the roles list.
+ * it to `{ access, refresh, user }`.
+ *
+ * `user.role` comes back as the role name directly (e.g. `"SECTION_LEADER"`)
+ * — not a UUID needing a lookup against `/api/v1/roles/`, despite what the
+ * OpenAPI schema documents. An earlier version of this function resolved it
+ * through that endpoint; that lookup never matched anything against the live
+ * API (comparing a role name to a list of UUIDs) and has been removed.
  */
 export async function loginWithPassword(credentials: {
   email?: string;
@@ -158,33 +161,7 @@ export async function loginWithPassword(credentials: {
     throw new Error("Login response did not include an access/refresh token pair.");
   }
 
-  const roleName = await resolveRoleName(user.role, tokens.access);
-  return {
-    access: tokens.access,
-    refresh: tokens.refresh,
-    user: roleName ? { ...user, role_name: roleName } : user,
-  };
-}
-
-/**
- * Look up a role UUID's name from `/api/v1/roles/`. Never throws — routing
- * falls back without it. Note: cell leaders get 403 on that endpoint, so
- * `role_name` only enriches for privileged users; leaf users route via the
- * `is_superuser` flag + the `CELL_LEADER` default in `resolveRole`
- * (`lib/auth/roles.ts`).
- */
-async function resolveRoleName(roleId: string | undefined, access: string): Promise<string | null> {
-  if (!roleId) return null;
-  try {
-    const page = await httpRequest<Paginated<UserRole> | UserRole[]>(upstreamUrl(API_ROUTES.roles), {
-      headers: { Authorization: `Bearer ${access}` },
-      timeoutMs: 8_000,
-    });
-    const list = Array.isArray(page) ? page : page.results;
-    return list.find((r) => r.id === roleId)?.name ?? null;
-  } catch {
-    return null;
-  }
+  return { access: tokens.access, refresh: tokens.refresh, user };
 }
 
 /** `POST /api/token/` — bare SimpleJWT pair, no profile. */

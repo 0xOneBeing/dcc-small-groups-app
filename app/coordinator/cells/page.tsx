@@ -12,25 +12,28 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { colors } from "@/lib/tokens";
-import { useNonSubmitters } from "@/hooks/api/dashboard";
+import { useNonSubmitters, useOrgDashboard } from "@/hooks/api/dashboard";
 import type { NonSubmitterRow } from "@/lib/api/types";
 import {
   ErrorCard,
   SectionCard,
   ServiceDatePicker,
+  StatTile,
   defaultServiceDate,
 } from "@/components/coordinator/kit";
 
 /**
  * Cells register — scoped to what the API exposes at cell granularity today:
- * the non-reporting / chronic cells for a given Sunday. A full register with
- * per-cell submission rates needs an endpoint the API does not offer yet.
+ * the non-reporting / chronic cells for a given Sunday. A full directory of
+ * every cell (leader, type, 8-week rate, "Add cell") needs a "list units in my
+ * scope" endpoint the API does not offer yet — see the note at the bottom.
  */
 export default function CellsPage() {
   const [serviceDate, setServiceDate] = useState(defaultServiceDate);
   const [chronicOnly, setChronicOnly] = useState(false);
   const [query, setQuery] = useState("");
 
+  const dash = useOrgDashboard(serviceDate);
   const nonSubmitters = useNonSubmitters({ serviceDate, chronic: chronicOnly });
 
   const rows = useMemo(() => {
@@ -43,6 +46,13 @@ export default function CellsPage() {
       .sort((a, b) => (b.consecutive_misses ?? 0) - (a.consecutive_misses ?? 0));
   }, [nonSubmitters.data, query]);
 
+  const total = dash.data?.total_cells ?? 0;
+  const submitted = dash.data?.submitted_cells ?? 0;
+  const notSubmitted = dash.data?.missing_cells?.length ?? Math.max(0, total - submitted);
+  const chronicCount = (nonSubmitters.data ?? []).filter(
+    (r) => r.chronic ?? (r.consecutive_misses ?? 0) >= 3,
+  ).length;
+
   return (
     <>
       <PageHeader
@@ -53,6 +63,22 @@ export default function CellsPage() {
       />
 
       <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 18, maxWidth: 1000 }}>
+        {dash.isError ? (
+          <ErrorCard message={`Could not load cell counts: ${dash.error.message}`} />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14 }}>
+            <StatTile label="Cells in scope" value={total} loading={dash.isLoading} />
+            <StatTile label="Reported" value={submitted} color={colors.green} loading={dash.isLoading} />
+            <StatTile label="Not submitted" value={notSubmitted} color={colors.red} loading={dash.isLoading} />
+            <StatTile
+              label="Chronic"
+              value={chronicCount}
+              color={colors.red}
+              loading={nonSubmitters.isLoading}
+            />
+          </div>
+        )}
+
         {nonSubmitters.isError ? (
           <ErrorCard message={`Could not load cells: ${nonSubmitters.error.message}`} />
         ) : (
@@ -120,6 +146,13 @@ export default function CellsPage() {
             )}
           </SectionCard>
         )}
+
+        <div style={{ fontSize: 11, color: colors.faint2, lineHeight: 1.5 }}>
+          A full directory of every cell &mdash; leader, type, code, an 8-week rate per cell &mdash;
+          needs an endpoint that lists the units in your scope, which the API does not expose yet.
+          Cell creation is not here either: the PRD routes that through the Super Admin&rsquo;s CSV
+          upload, not a per-scope &ldquo;Add cell&rdquo; action.
+        </div>
       </div>
     </>
   );

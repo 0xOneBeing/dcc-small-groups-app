@@ -131,11 +131,15 @@ export default function ExportsPage() {
       <PageHeader
         eyebrow="Coordinator"
         title="Exports"
-        sub="Download compliance data for a date range"
+        sub="Pull the same figures the dashboard shows into a CSV for board and pastoral reporting."
       />
 
       <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 18, maxWidth: 720 }}>
-        <SectionCard title="Compliance export" sub="Scoped to your hierarchy level. CSV.">
+        <SectionCard
+          title="Compliance summary"
+          sub="Submitted, pending and missing counts. Scope: your assigned level — there's no way to
+            pick a level below it, since nothing lists the units under you yet."
+        >
           <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {PRESETS.map((p) => (
@@ -180,10 +184,7 @@ export default function ExportsPage() {
 
         <ChronicExportCard />
 
-        <div style={{ fontSize: 11, color: colors.faint2, lineHeight: 1.5 }}>
-          PDF export, follow-up outcomes, and a leader directory are not available yet — the API
-          has no endpoint for any of those datasets.
-        </div>
+        <NotAvailableCard />
       </div>
     </>
   );
@@ -232,6 +233,63 @@ function ChronicExportCard() {
         >
           Download CSV
         </Button>
+      </div>
+    </SectionCard>
+  );
+}
+
+const BLOCKED_DATASETS = [
+  {
+    label: "Report figures",
+    detail: "All 24 fields per cell, per Sunday",
+    reason: "needs a bulk per-cell report export — the current endpoint returns a summary, not raw figures",
+  },
+  {
+    label: "Follow-up outcomes",
+    detail: "Assignments, contact status and days open",
+    reason: "no first-timer / follow-up data exists in the API yet",
+  },
+  {
+    label: "Leader directory",
+    detail: "Names, roles, phone numbers and activation status",
+    reason: "no endpoint lists the leaders in your scope",
+  },
+];
+
+/**
+ * Shown, not hidden: lists the rest of the export feature set from the design
+ * so it's visible what's coming, each with why it isn't wired up yet, rather
+ * than silently dropping it from the page.
+ */
+function NotAvailableCard() {
+  return (
+    <SectionCard title="Not available yet" sub="PDF format and scheduled, emailed exports are blocked for the same reasons.">
+      <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+        {BLOCKED_DATASETS.map((d) => (
+          <label
+            key={d.label}
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              padding: "10px 12px",
+              border: `1px solid ${colors.hairline}`,
+              borderRadius: 10,
+              cursor: "not-allowed",
+            }}
+          >
+            <input type="checkbox" disabled style={{ marginTop: 3 }} aria-label={`${d.label} — not available yet`} />
+            <span>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: colors.faint }}>
+                {d.label}
+              </span>
+              <span style={{ display: "block", fontSize: 11.5, color: colors.faint2, marginTop: 1 }}>{d.detail}</span>
+              <span style={{ display: "block", fontSize: 11, color: colors.faint2, marginTop: 3, fontStyle: "italic" }}>
+                Blocked: {d.reason}.
+              </span>
+            </span>
+          </label>
+        ))}
       </div>
     </SectionCard>
   );

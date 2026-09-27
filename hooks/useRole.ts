@@ -30,7 +30,7 @@ export function useRole(): UseRoleResult {
     () =>
       resolveRole({
         isSuperuser: (user?.is_superuser as boolean | undefined) ?? null,
-        roleName: user?.role_name,
+        roleName: user?.role,
         claims: (user as Record<string, unknown> | null) ?? null,
       }),
     [user],

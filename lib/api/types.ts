@@ -31,8 +31,14 @@ export interface TokenRefreshResponse {
 
 /**
  * The user profile the API returns on login (as `data`, minus `tokens`).
- * `role` is a UUID into `/api/v1/roles/`; `role_name` is enriched in by our
- * login route. Extra keys pass through.
+ * `role` is the role name directly (e.g. `"SECTION_LEADER"`) — despite the
+ * OpenAPI schema documenting it as a UUID into `/api/v1/roles/`, the live API
+ * sends the name itself, and `lib/auth/roles.ts` matches against it exactly.
+ * Also carries the caller's own org unit nested under a role-specific key
+ * (`section: {id, name}` for a Section Leader, presumably `region` /
+ * `district` / `zone` / `area` / `cell` for the others) — not yet typed here
+ * since only the Section Leader shape has been confirmed live.
+ * Extra keys pass through.
  */
 export interface ApiUser {
   id?: string | number;
@@ -41,9 +47,9 @@ export interface ApiUser {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
-  /** Role primary key (UUID). Resolve against `/api/v1/roles/` for a label. */
+  /** The role name, exact (e.g. `"SECTION_LEADER"`) — see the interface doc above. */
   role?: string;
-  /** Enriched by `app/api/auth/login` from the roles list — not sent by the API. */
+  /** @deprecated Never populated — kept only so old cached `dcc_user` cookies still typecheck. */
   role_name?: string;
   is_superuser?: boolean;
   is_staff?: boolean;

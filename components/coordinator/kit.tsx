@@ -17,6 +17,27 @@ export function complianceColor(pct: number): string {
   return colors.red;
 }
 
+/** "+3 pts" / "-4 pts" / "±0 pts", colored — the change vs. the previous point in a trend. */
+export function deltaFromTrend(points: { value: number }[]): { text: string; color: string } | null {
+  if (points.length < 2) return null;
+  const diff = Math.round(points[points.length - 1].value - points[points.length - 2].value);
+  if (diff === 0) return { text: "±0 pts", color: colors.faint };
+  return { text: `${diff > 0 ? "+" : ""}${diff} pts`, color: diff > 0 ? colors.green : colors.red };
+}
+
+/** Whole/half-hour phrasing for a fallback-approval window ("36 hours", "1.5 hours"). */
+export function formatHours(seconds: number): string {
+  const hours = Math.round((seconds / 3600) * 10) / 10;
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
+/** First + last name from the `/api/auth/session` profile, for a personal subtitle. */
+export function displayNameFrom(user: Record<string, unknown> | null | undefined): string | null {
+  if (!user) return null;
+  const name = [user.first_name, user.last_name].filter((v) => typeof v === "string" && v).join(" ");
+  return name || null;
+}
+
 /** The most recent Sunday whose reporting window has closed, as YYYY-MM-DD. */
 export function defaultServiceDate(): string {
   return lastClosedSundays(1, new Date())[0].toISOString().slice(0, 10);
@@ -84,12 +105,18 @@ export function StatTile({
   value,
   hint,
   color = colors.ink,
+  delta,
+  trend,
   loading = false,
 }: {
   label: string;
   value: ReactNode;
-  hint?: string;
+  hint?: ReactNode;
   color?: string;
+  /** Small colored "+3 pts" / "-4 pts" shown right next to the value. */
+  delta?: { text: string; color: string } | null;
+  /** An optional `BarStrip` (or similar) rendered below the value, above the hint. */
+  trend?: ReactNode;
   loading?: boolean;
 }) {
   return (
@@ -109,10 +136,16 @@ export function StatTile({
       {loading ? (
         <Skeleton className="h-8 w-20" />
       ) : (
-        <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.03em", lineHeight: 1, fontFamily: mono, color }}>
-          {value}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <div style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.03em", lineHeight: 1, fontFamily: mono, color }}>
+            {value}
+          </div>
+          {delta && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: delta.color }}>{delta.text}</div>
+          )}
         </div>
       )}
+      {trend && !loading && <div style={{ marginTop: 14 }}>{trend}</div>}
       {hint && (
         <div style={{ fontSize: 11.5, color: colors.faint, marginTop: "auto", paddingTop: 12, lineHeight: 1.45 }}>
           {loading ? <Skeleton className="h-3 w-32" /> : hint}

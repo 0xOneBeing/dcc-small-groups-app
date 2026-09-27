@@ -14,6 +14,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { colors } from "@/lib/tokens";
 import { formatServiceDate } from "@/lib/dates";
 import { useOrgDashboard, useComplianceTrends, useNonSubmitters } from "@/hooks/api/dashboard";
+import { useApprovalSettings } from "@/hooks/api/approvals";
+import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/hooks/useRole";
 import type { NonSubmitterRow } from "@/lib/api/types";
 import {
   BarStrip,
@@ -23,22 +26,40 @@ import {
   StatTile,
   complianceColor,
   defaultServiceDate,
+  deltaFromTrend,
+  displayNameFrom,
+  formatHours,
 } from "@/components/coordinator/kit";
 
-type TrendWeeks = 4 | 8 | 12;
+const TREND_WEEKS = 8;
 
 export default function CompliancePage() {
   const [serviceDate, setServiceDate] = useState(defaultServiceDate);
-  const [weeks, setWeeks] = useState<TrendWeeks>(8);
   const [chronicOnly, setChronicOnly] = useState(false);
 
+  const { user } = useAuth();
+  const { capabilities } = useRole();
   const dash = useOrgDashboard(serviceDate);
-  const trends = useComplianceTrends(weeks);
+  const trends = useComplianceTrends(TREND_WEEKS);
   const nonSubmitters = useNonSubmitters({ serviceDate, chronic: chronicOnly });
+  // Best-effort: some roles may not have access to this endpoint; failing
+  // silently just drops the escalation-hours line, no error UI.
+  const approvalSettings = useApprovalSettings();
 
   const pct = Math.round(dash.data?.compliance_percentage ?? 0);
   const submitted = dash.data?.submitted_cells ?? 0;
   const total = dash.data?.total_cells ?? 0;
+  const missing = dash.data?.missing_cells?.length ?? Math.max(0, total - submitted);
+
+  const personName = displayNameFrom(user);
+  const subtitle = [capabilities.label, personName].filter(Boolean).join(" ") + (
+    dash.data ? ` · ${total} cell${total === 1 ? "" : "s"} in scope` : ""
+  );
+
+  const escalationHours =
+    !approvalSettings.isError && approvalSettings.data?.approval_interval != null
+      ? formatHours(approvalSettings.data.approval_interval)
+      : null;
 
   const trendPoints = useMemo(
     () =>
@@ -48,6 +69,7 @@ export default function CompliancePage() {
       })),
     [trends.data],
   );
+  const delta = deltaFromTrend(trendPoints);
 
   const rows = useMemo(() => {
     const list = nonSubmitters.data ?? [];
@@ -61,7 +83,7 @@ export default function CompliancePage() {
       <PageHeader
         eyebrow="Coordinator"
         title="Compliance"
-        sub="Sunday report submission across everything in your scope"
+        sub={subtitle}
         right={<ServiceDatePicker value={serviceDate} onChange={setServiceDate} />}
       />
 
@@ -74,78 +96,38 @@ export default function CompliancePage() {
               label="Compliance"
               value={`${pct}%`}
               color={complianceColor(pct)}
-              hint={`${submitted} of ${total} cells submitted`}
-              loading={dash.isLoading}
+              delta={delta}
+              trend={<BarStrip points={trendPoints} colorFor={complianceColor} />}
+              hint={`Last ${TREND_WEEKS} Sundays`}
+              loading={dash.isLoading || trends.isLoading}
             />
             <StatTile
-              label="Submitted"
-              value={submitted}
-              color={colors.green}
-              hint="Reports received for this Sunday"
+              label="Not submitted"
+              value={missing}
+              color={colors.red}
+              hint="Cells with no report for this Sunday yet."
               loading={dash.isLoading}
             />
             <StatTile
               label="Pending approval"
               value={dash.data?.pending_approval ?? 0}
               color={colors.amber}
-              hint="Waiting on an approver"
+              hint={
+                escalationHours
+                  ? `Routes to the next approver if not acted on within ${escalationHours}.`
+                  : "Waiting on an approver."
+              }
               loading={dash.isLoading}
             />
             <StatTile
-              label="Approved"
-              value={dash.data?.approved ?? 0}
-              color={colors.ink}
-              hint="Signed off for this Sunday"
-              loading={dash.isLoading}
+              label="Chronic non-reporters"
+              value={rows.filter((r) => r.chronic ?? (r.consecutive_misses ?? 0) >= 3).length}
+              color={colors.red}
+              hint="Missed 3 or more consecutive Sundays."
+              loading={nonSubmitters.isLoading}
             />
           </div>
         )}
-
-        <SectionCard
-          title="Compliance trend"
-          sub={`Submission rate over the last ${weeks} Sundays`}
-          right={
-            <div style={{ display: "flex", gap: 6 }}>
-              {([4, 8, 12] as TrendWeeks[]).map((w) => (
-                <button
-                  key={w}
-                  type="button"
-                  onClick={() => setWeeks(w)}
-                  style={{
-                    border: `1px solid ${w === weeks ? colors.ink : colors.borderStrong}`,
-                    background: w === weeks ? colors.ink : "#fff",
-                    color: w === weeks ? "#fff" : colors.muted,
-                    borderRadius: 8,
-                    padding: "5px 10px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {w}
-                </button>
-              ))}
-            </div>
-          }
-        >
-          <div style={{ padding: 20 }}>
-            {trends.isError ? (
-              <div style={{ fontSize: 12.5, color: colors.red }}>
-                Could not load trends: {trends.error.message}
-              </div>
-            ) : trends.isLoading ? (
-              <Skeleton className="h-10 w-full" />
-            ) : (
-              <>
-                <BarStrip points={trendPoints} colorFor={complianceColor} />
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10.5, color: colors.faint2 }}>
-                  <span>{trendPoints[0]?.label ?? ""}</span>
-                  <span>{trendPoints[trendPoints.length - 1]?.label ?? ""}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </SectionCard>
 
         <SectionCard
           title="Non-reporting cells"
@@ -197,8 +179,9 @@ export default function CompliancePage() {
         </SectionCard>
 
         <div style={{ fontSize: 11, color: colors.faint2, lineHeight: 1.5 }}>
-          Cell-by-cell drill-down through Region → District → Zone → Area → Section needs a
-          child-unit listing the API does not expose yet; this view shows your whole scope rolled up.
+          Drill-down into individual districts, zones, areas and sections needs a child-unit listing
+          the API does not expose yet — this view shows your whole scope rolled up into one list of
+          non-reporting cells instead.
         </div>
       </div>
     </>

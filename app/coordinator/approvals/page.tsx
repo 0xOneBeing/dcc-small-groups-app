@@ -11,8 +11,18 @@ import { useDashboardApprovals } from "@/hooks/api/dashboard";
 import { useApproveReport, useRejectReport } from "@/hooks/api/reports";
 import { useRole } from "@/hooks/useRole";
 import { notify } from "@/lib/toast";
-import type { ApprovalWaitItem, SundayReport } from "@/lib/api/types";
-import { ErrorCard, SectionCard } from "@/components/coordinator/kit";
+import type { ApprovalWaitItem, ReportCell, SundayReport } from "@/lib/api/types";
+import { ErrorCard, SectionCard, formatHours } from "@/components/coordinator/kit";
+
+/** `report.cell` is a nested object on some endpoints, a bare UUID on others. */
+function cellOf(report: SundayReport): ReportCell | null {
+  return typeof report.cell === "object" && report.cell ? report.cell : null;
+}
+
+/** Best available cell display name: the nested cell object, then the dashboard's own label. */
+function cellName(report: SundayReport, wait?: ApprovalWaitItem): string {
+  return cellOf(report)?.name ?? (wait?.cell as string | undefined) ?? "Cell report";
+}
 
 function formatWait(seconds?: number): string {
   if (!seconds || seconds < 0) return "—";
@@ -47,12 +57,32 @@ export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = reports.find((r) => r.id === selectedId) ?? reports[0] ?? null;
 
+  // Best-effort: some roles may not have access to this endpoint; failing
+  // silently just drops the escalation-hours line, no error UI.
+  const approvalSettings = useApprovalSettings();
+  const escalationHours =
+    !approvalSettings.isError && approvalSettings.data?.approval_interval != null
+      ? formatHours(approvalSettings.data.approval_interval)
+      : null;
+
+  const subtitle = queue.isLoading
+    ? "Cell reports awaiting your decision"
+    : `${reports.length} report${reports.length === 1 ? "" : "s"} waiting on you.` +
+      (escalationHours
+        ? ` Anything not acted on in ${escalationHours} escalates to the next approver.`
+        : "");
+
   return (
     <>
       <PageHeader
         eyebrow="Coordinator"
         title="Approvals"
-        sub="Cell reports awaiting your decision"
+        sub={subtitle}
+        right={
+          capabilities.canApprove && reports.length > 0 ? (
+            <BulkApproveButton reports={reports} />
+          ) : undefined
+        }
       />
 
       <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 18, maxWidth: 1200 }}>
@@ -77,15 +107,7 @@ export default function ApprovalsPage() {
             }}
             className="dcc-wizard"
           >
-            <SectionCard
-              title="Queue"
-              sub={queue.isLoading ? "Loading…" : `${reports.length} pending`}
-              right={
-                capabilities.canApprove && reports.length > 0 ? (
-                  <BulkApproveButton reports={reports} />
-                ) : undefined
-              }
-            >
+            <SectionCard title="Queue" sub={queue.isLoading ? "Loading…" : `${reports.length} pending`}>
               {queue.isLoading ? (
                 <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                   {Array.from({ length: 4 }).map((_, i) => (
@@ -119,15 +141,22 @@ export default function ApprovalsPage() {
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: on ? colors.red : colors.ink }}>
-                            {(w?.cell as string) ?? "Cell report"}
+                            {cellName(r, w)}
                           </span>
                           <span style={{ fontSize: 11, fontWeight: 700, fontFamily: mono, color: w?.overdue ? colors.red : colors.faint }}>
                             {formatWait(w?.waiting_seconds)}
                           </span>
                         </div>
                         <div style={{ fontSize: 11.5, color: colors.faint, marginTop: 3 }}>
-                          {r.service_date ? formatServiceDate(new Date(r.service_date)) : "—"} · {r.members_present ?? 0} present
-                          {w?.overdue ? " · overdue" : ""}
+                          {[
+                            cellOf(r)?.leader &&
+                              [cellOf(r)!.leader!.first_name, cellOf(r)!.leader!.last_name].filter(Boolean).join(" "),
+                            r.service_date ? formatServiceDate(new Date(r.service_date)) : null,
+                            `${r.members_present ?? 0} present`,
+                            w?.overdue ? "overdue" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </div>
                       </button>
                     );
@@ -259,12 +288,17 @@ function ReportDetail({
     }
   }
 
+  const cell = cellOf(report);
+  const leaderName = cell?.leader
+    ? [cell.leader.first_name, cell.leader.last_name].filter(Boolean).join(" ")
+    : null;
+
   return (
     <Card style={{ padding: 0 }}>
       <div style={{ padding: "18px 22px", borderBottom: `1px solid ${colors.hairline}` }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
           <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.02em" }}>
-            {(wait?.cell as string) ?? "Cell report"}
+            {cellName(report, wait)}
           </div>
           <div style={{ fontSize: 12, color: wait?.overdue ? colors.red : colors.faint, fontFamily: mono, fontWeight: 600 }}>
             waiting {formatWait(wait?.waiting_seconds)}
@@ -272,25 +306,45 @@ function ReportDetail({
           </div>
         </div>
         <div style={{ fontSize: 12.5, color: colors.muted, marginTop: 4 }}>
-          {report.service_date ? formatServiceDate(new Date(report.service_date)) : "—"} ·{" "}
-          {report.meeting_held === false ? "meeting not held" : "meeting held"} ·{" "}
-          submitted {report.date_created ? formatServiceDate(new Date(report.date_created)) : "—"}
+          {[
+            leaderName && `Cell Leader ${leaderName}`,
+            cell?.code,
+            report.service_date ? formatServiceDate(new Date(report.service_date)) : null,
+            report.meeting_held === false ? "meeting not held" : "meeting held",
+            report.date_created ? `submitted ${formatServiceDate(new Date(report.date_created))}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       </div>
 
       <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 18 }}>
         {report.comment && (
-          <div
-            style={{
-              fontSize: 12.5,
-              color: colors.muted,
-              background: colors.panel,
-              borderRadius: 10,
-              padding: "10px 12px",
-              lineHeight: 1.5,
-            }}
-          >
-            “{report.comment}”
+          <div>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: colors.faint,
+                marginBottom: 8,
+              }}
+            >
+              Cell Leader comments
+            </div>
+            <div
+              style={{
+                fontSize: 12.5,
+                color: colors.muted,
+                background: colors.panel,
+                borderRadius: 10,
+                padding: "10px 12px",
+                lineHeight: 1.5,
+              }}
+            >
+              “{report.comment}”
+            </div>
           </div>
         )}
 
@@ -359,13 +413,22 @@ function ReportDetail({
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
                 <Button variant="primary" onClick={onApprove} disabled={busy}>
                   {approve.isPending ? "Approving…" : "Approve"}
                 </Button>
                 <Button variant="danger-outline" onClick={() => setMode("reject")} disabled={busy}>
                   Send back
                 </Button>
+                {/* Not wired up — no messaging endpoint exists yet. Shown, not hidden, so the
+                    intended feature set is visible; disabled rather than silently omitted. */}
+                <span
+                  aria-disabled="true"
+                  title="Not available yet — there's no messaging endpoint."
+                  style={{ fontSize: 13, color: colors.faint2, cursor: "not-allowed" }}
+                >
+                  Message leader
+                </span>
               </div>
             )}
           </div>
