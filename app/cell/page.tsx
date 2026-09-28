@@ -1,7 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { colors, mono } from "@/lib/tokens";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { SundayReport } from "@/lib/api/types";
+import { StatusPill } from "@/components/leader/StatusPill";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { PageHeader, Card, LinkButton } from "@/components/ui";
+import { mostRecentSunday, formatServiceDate } from "@/lib/dates";
+import { useMyReports, useMyReportsPage } from "@/hooks/api/reports";
+import { ReportDetailDialog } from "@/components/leader/ReportDetailDialog";
 import {
   Table,
   TableBody,
@@ -10,11 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
-import { colors, mono } from "@/lib/tokens";
-import { useMyReports } from "@/hooks/api/reports";
-import { mostRecentSunday, formatServiceDate } from "@/lib/dates";
-import type { ApprovalStatus, SundayReport } from "@/lib/api/types";
 
 const naira = new Intl.NumberFormat("en-NG", {
   style: "currency",
@@ -33,8 +38,58 @@ function followUpsOf(r: SundayReport): number {
 }
 
 export default function MyCellPage() {
-  const serviceDate = useMemo(() => mostRecentSunday(new Date()).toISOString().slice(0, 10), []);
+  const serviceDate = useMemo(
+    () => mostRecentSunday(new Date()).toISOString().slice(0, 10),
+    [],
+  );
+  // Every page, merged — feeds the stat cards, streak and attendance chart, which
+  // all need the whole history. Loads in the background; the table doesn't wait on it.
   const mine = useMyReports();
+  // Track the id, not the object, so the open dialog stays current across refetches.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // The table itself shows exactly one server page; Next / Previous request
+  // `reports/mine/?page=N` for that page.
+  const [page, setPage] = useState(1);
+  const [knownPageSize, setKnownPageSize] = useState<number | null>(null);
+  // Service-date filter (YYYY-MM-DD, "" = none) — sent to the API as `?date=`.
+  const [dateFilter, setDateFilter] = useState("");
+  // What's typed in the picker. Kept apart from `dateFilter` because a native date
+  // input reports a "valid" date while the year is still being typed (0002-…, 0020-…).
+  const [dateDraft, setDateDraft] = useState("");
+  const pageQuery = useMyReportsPage(page, dateFilter || undefined);
+  const pageRows = pageQuery.data?.results ?? [];
+  const totalCount = pageQuery.data?.count ?? 0;
+  // The API doesn't state its page size; a page that has a `next` is a full page,
+  // so its length is the size. Remembered on navigation so later pages can use it.
+  const pageSize = knownPageSize ?? (pageRows.length || 1);
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const rangeStart = (page - 1) * pageSize + 1;
+  const rangeEnd = rangeStart + pageRows.length - 1;
+  const pageBusy = pageQuery.isFetching;
+
+  function applyDateFilter(value: string) {
+    setDateFilter(value);
+    setPage(1); // a different result set — start from its first page
+  }
+
+  function onDateInput(value: string) {
+    setDateDraft(value);
+    if (value === "") applyDateFilter("");
+    else if (value >= "2000-01-01" && value <= "2100-12-31")
+      applyDateFilter(value);
+  }
+
+  function clearDateFilter() {
+    setDateDraft("");
+    applyDateFilter("");
+  }
+
+  function goToPage(target: number) {
+    if (pageQuery.data?.next && pageRows.length > 0)
+      setKnownPageSize(pageRows.length);
+    setPage(target);
+  }
 
   const reports = useMemo(
     () =>
@@ -44,6 +99,12 @@ export default function MyCellPage() {
     [mine.data],
   );
   const current = reports.find((r) => r.service_date === serviceDate) ?? null;
+  // A row may be clicked before the all-pages query has finished, so look on the
+  // visible page first.
+  const selected =
+    pageRows.find((r) => r.id === selectedId) ??
+    reports.find((r) => r.id === selectedId) ??
+    null;
 
   // Consecutive most-recent weeks that were reported (any status other than a miss).
   const streak = useMemo(() => {
@@ -56,39 +117,101 @@ export default function MyCellPage() {
   }, [reports]);
 
   const stats = useMemo(() => {
-    const approved = reports.filter((r) => r.approval_status === "APPROVED").length;
-    const pending = reports.filter((r) => r.approval_status === "PENDING").length;
+    const approved = reports.filter(
+      (r) => r.approval_status === "APPROVED",
+    ).length;
+    const pending = reports.filter(
+      (r) => r.approval_status === "PENDING",
+    ).length;
     const attended = reports.filter((r) => (r.members_present ?? 0) > 0);
     const avgAttendance = attended.length
-      ? Math.round(attended.reduce((sum, r) => sum + (r.members_present ?? 0), 0) / attended.length)
+      ? Math.round(
+          attended.reduce((sum, r) => sum + (r.members_present ?? 0), 0) /
+            attended.length,
+        )
       : 0;
-    const totalOffering = reports.reduce((sum, r) => sum + (r.total_offering ?? 0), 0);
+    const totalOffering = reports.reduce(
+      (sum, r) => sum + (r.total_offering ?? 0),
+      0,
+    );
     const totalFollowUps = reports.reduce((sum, r) => sum + followUpsOf(r), 0);
     return { approved, pending, avgAttendance, totalOffering, totalFollowUps };
   }, [reports]);
 
   return (
     <>
-      <PageHeader eyebrow="My cell" title="Cell Leader" sub="Your Sunday reporting at a glance" />
-      <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 20, maxWidth: 1100 }}>
+      <PageHeader
+        eyebrow="My cell"
+        title="Cell Leader"
+        sub="Your Sunday reporting at a glance"
+      />
+      <div
+        style={{
+          padding: 28,
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          maxWidth: 1100,
+        }}
+      >
         {mine.isError ? (
-          <Card style={{ padding: 20, background: colors.redSoft, borderColor: colors.redSoftBorder }}>
-            <div style={{ fontSize: 13.5, color: colors.red }}>Could not load your reports: {mine.error.message}</div>
+          <Card
+            style={{
+              padding: 20,
+              background: colors.redSoft,
+              borderColor: colors.redSoftBorder,
+            }}
+          >
+            <div style={{ fontSize: 13.5, color: colors.red }}>
+              Could not load your reports: {mine.error.message}
+            </div>
           </Card>
         ) : (
-          <NextActionCard report={current} serviceDate={serviceDate} loading={mine.isLoading} />
+          <NextActionCard
+            report={current}
+            serviceDate={serviceDate}
+            loading={mine.isLoading}
+          />
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 16 }}>
-          <StatCard label="Total submitted" value={String(reports.length)} loading={mine.isLoading} />
-          <StatCard label="Approved" value={String(stats.approved)} loading={mine.isLoading} />
-          <StatCard label="Pending review" value={String(stats.pending)} loading={mine.isLoading} />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))",
+            gap: 16,
+          }}
+        >
+          <StatCard
+            label="Total submitted"
+            value={String(
+              dateFilter
+                ? reports.length
+                : (pageQuery.data?.count ?? reports.length),
+            )}
+            loading={
+              dateFilter ? mine.isLoading : !pageQuery.data && mine.isLoading
+            }
+          />
+          <StatCard
+            label="Approved"
+            value={String(stats.approved)}
+            loading={mine.isLoading}
+          />
+          <StatCard
+            label="Pending review"
+            value={String(stats.pending)}
+            loading={mine.isLoading}
+          />
           <StatCard
             label="Reporting streak"
             value={`${streak} wk${streak === 1 ? "" : "s"}`}
             loading={mine.isLoading}
           />
-          <StatCard label="Avg attendance" value={String(stats.avgAttendance)} loading={mine.isLoading} />
+          <StatCard
+            label="Avg attendance"
+            value={String(stats.avgAttendance)}
+            loading={mine.isLoading}
+          />
           <StatCard
             label="Follow-ups logged"
             value={String(stats.totalFollowUps)}
@@ -102,18 +225,168 @@ export default function MyCellPage() {
         </div>
 
         <Card style={{ padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Submission record — most recent</div>
-          {mine.isLoading ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
+              Submission record
+            </div>
+            {pageRows.length > 0 && (
+              <div style={{ fontSize: 11.5, color: colors.faint }}>
+                Select a row for full details
+              </div>
+            )}
+          </div>
+          {(totalCount > 0 || dateFilter) && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                marginBottom: 14,
+              }}
+            >
+              <label
+                htmlFor="report-date-filter"
+                style={{ fontSize: 12, color: colors.muted }}
+              >
+                Service date
+              </label>
+              <Input
+                id="report-date-filter"
+                type="date"
+                value={dateDraft}
+                onChange={(e) => onDateInput(e.target.value)}
+                className="h-8 w-auto text-sm"
+              />
+              {(dateFilter || dateDraft) && (
+                <Button variant="ghost" size="sm" onClick={clearDateFilter}>
+                  <X />
+                  Clear
+                </Button>
+              )}
+            </div>
+          )}
+          {pageQuery.isLoading ? (
             <SubmissionTableSkeleton />
-          ) : reports.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: colors.faint }}>No reports submitted yet.</div>
+          ) : pageQuery.isError && !pageQuery.data ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: 12.5, color: colors.red }}>
+                Could not load page {page}: {pageQuery.error.message}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => pageQuery.refetch()}
+              >
+                Retry
+              </Button>
+              {page > 1 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                >
+                  Back
+                </Button>
+              )}
+              {dateFilter && (
+                <Button variant="outline" size="sm" onClick={clearDateFilter}>
+                  Clear filter
+                </Button>
+              )}
+            </div>
+          ) : totalCount === 0 ? (
+            <div style={{ fontSize: 12.5, color: colors.faint }}>
+              {dateFilter
+                ? `No report found for ${dateFilter}.`
+                : "No reports submitted yet."}
+            </div>
           ) : (
-            <SubmissionTable rows={reports.slice(0, 8)} />
+            <>
+              {/* While the next page loads, the previous one stays up, dimmed. */}
+              <div
+                style={{
+                  opacity: pageQuery.isPlaceholderData ? 0.55 : 1,
+                  transition: "opacity 120ms",
+                }}
+              >
+                <SubmissionTable
+                  rows={pageRows}
+                  onSelect={(r) => setSelectedId(r.id)}
+                />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginTop: 14,
+                }}
+              >
+                <div style={{ fontSize: 12, color: colors.muted }}>
+                  {pageQuery.isPlaceholderData
+                    ? `Loading page ${page}…`
+                    : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}${dateFilter ? " for this date" : ""}`}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(page - 1)}
+                    disabled={page <= 1 || pageBusy}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft />
+                    Previous
+                  </Button>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: colors.muted,
+                      minWidth: 74,
+                      textAlign: "center",
+                    }}
+                  >
+                    Page {page} of {pageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(page + 1)}
+                    disabled={!pageQuery.data?.next || pageBusy}
+                    aria-label="Next page"
+                  >
+                    Next
+                    <ChevronRight />
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </Card>
 
         <Card style={{ padding: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Attendance, last 8 Sundays</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>
+            Attendance, last 8 Sundays
+          </div>
           {mine.isLoading ? (
             <Skeleton className="mt-4 h-24 w-full" />
           ) : reports.length === 0 ? (
@@ -125,6 +398,11 @@ export default function MyCellPage() {
           )}
         </Card>
       </div>
+
+      <ReportDetailDialog
+        report={selected}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+      />
     </>
   );
 }
@@ -158,24 +436,59 @@ function HeaderRow() {
   );
 }
 
-function SubmissionTable({ rows }: { rows: SundayReport[] }) {
+function SubmissionTable({
+  rows,
+  onSelect,
+}: {
+  rows: SundayReport[];
+  onSelect: (r: SundayReport) => void;
+}) {
   return (
     <Table>
       <HeaderRow />
       <TableBody>
         {rows.map((r) => (
-          <TableRow key={r.id}>
+          <TableRow
+            key={r.id}
+            tabIndex={0}
+            aria-haspopup="dialog"
+            aria-label={`View details for ${r.service_date ?? "report"}`}
+            className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none"
+            onClick={() => onSelect(r)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(r);
+              }
+            }}
+          >
             <TableCell className="font-medium">
-              {r.service_date ? formatServiceDate(new Date(r.service_date)) : "—"}
+              {r.service_date
+                ? formatServiceDate(new Date(r.service_date))
+                : "—"}
             </TableCell>
             <TableCell
-              className={r.meeting_held === false ? "text-destructive" : "text-muted-foreground"}
+              className={
+                r.meeting_held === false
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              }
             >
-              {r.meeting_held === false ? "Not held" : r.meeting_held ? "Held" : "—"}
+              {r.meeting_held === false
+                ? "Not held"
+                : r.meeting_held
+                  ? "Held"
+                  : "—"}
             </TableCell>
-            <TableCell className="text-right tabular-nums">{r.members_present ?? "—"}</TableCell>
-            <TableCell className="text-right tabular-nums">{r.guests_cards ?? "—"}</TableCell>
-            <TableCell className="text-right tabular-nums">{followUpsOf(r)}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {r.members_present ?? "—"}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {r.guests_cards ?? "—"}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {followUpsOf(r)}
+            </TableCell>
             <TableCell className="text-right tabular-nums">
               {r.total_offering != null ? naira.format(r.total_offering) : "—"}
             </TableCell>
@@ -213,7 +526,15 @@ function SubmissionTableSkeleton({ rows = 5 }: { rows?: number }) {
   );
 }
 
-function StatCard({ label, value, loading }: { label: string; value: string; loading?: boolean }) {
+function StatCard({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: string;
+  loading?: boolean;
+}) {
   return (
     <Card style={{ padding: "16px 18px" }}>
       {loading ? (
@@ -231,7 +552,9 @@ function StatCard({ label, value, loading }: { label: string; value: string; loa
           {value}
         </div>
       )}
-      <div style={{ fontSize: 11.5, color: colors.muted, marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 11.5, color: colors.muted, marginTop: 4 }}>
+        {label}
+      </div>
     </Card>
   );
 }
@@ -243,16 +566,36 @@ function AttendanceStrip({ reports }: { reports: SundayReport[] }) {
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 110 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 10,
+          height: 110,
+        }}
+      >
         {chronological.map((r, i) => {
           const value = r.members_present ?? 0;
           const isLatest = i === chronological.length - 1;
           return (
             <div
               key={r.id}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+              }}
             >
-              <div style={{ fontSize: 11, fontWeight: 600, fontFamily: mono, color: isLatest ? colors.red : colors.muted }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fontFamily: mono,
+                  color: isLatest ? colors.red : colors.muted,
+                }}
+              >
                 {value}
               </div>
               <div
@@ -265,29 +608,22 @@ function AttendanceStrip({ reports }: { reports: SundayReport[] }) {
                   background: isLatest ? colors.red : colors.hairline,
                 }}
               />
-              <div style={{ fontSize: 10, color: colors.faint2, whiteSpace: "nowrap" }}>
-                {r.service_date ? formatServiceDate(new Date(r.service_date)) : "—"}
+              <div
+                style={{
+                  fontSize: 10,
+                  color: colors.faint2,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {r.service_date
+                  ? formatServiceDate(new Date(r.service_date))
+                  : "—"}
               </div>
             </div>
           );
         })}
       </div>
     </div>
-  );
-}
-
-function StatusPill({ status }: { status: ApprovalStatus }) {
-  const map: Record<ApprovalStatus, { label: string; bg: string; fg: string }> = {
-    APPROVED: { label: "Approved", bg: colors.greenSoft, fg: colors.green },
-    PENDING: { label: "Pending", bg: colors.amberSoft, fg: colors.amber },
-    REJECTED: { label: "Sent back", bg: colors.redSoft, fg: colors.red },
-    DELETED: { label: "Deleted", bg: colors.chipGrey, fg: colors.muted },
-  };
-  const t = map[status];
-  return (
-    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: t.bg, color: t.fg }}>
-      {t.label}
-    </span>
   );
 }
 
@@ -313,11 +649,27 @@ function NextActionCard({
 
   if (report?.approval_status === "REJECTED") {
     return (
-      <Card style={{ padding: 20, borderColor: colors.redSoftBorder, background: colors.redSoft }}>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.red, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <Card
+        style={{
+          padding: 20,
+          borderColor: colors.redSoftBorder,
+          background: colors.redSoft,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: colors.red,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
           Sent back
         </div>
-        <div style={{ fontSize: 14, marginTop: 6, marginBottom: 10 }}>{report.comment || "Your approver asked for a correction."}</div>
+        <div style={{ fontSize: 14, marginTop: 6, marginBottom: 10 }}>
+          {report.comment || "Your approver asked for a correction."}
+        </div>
         <LinkButton href="/cell/report" variant="primary">
           Edit and resubmit
         </LinkButton>
@@ -328,10 +680,20 @@ function NextActionCard({
   if (report?.approval_status === "PENDING") {
     return (
       <Card style={{ padding: 20 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.amber, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: colors.amber,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
           Submitted
         </div>
-        <div style={{ fontSize: 14, marginTop: 6 }}>{dueLabel} is waiting on your Section Leader for approval.</div>
+        <div style={{ fontSize: 14, marginTop: 6 }}>
+          {dueLabel} is waiting on your Section Leader for approval.
+        </div>
       </Card>
     );
   }
@@ -339,18 +701,40 @@ function NextActionCard({
   if (report?.approval_status === "APPROVED") {
     return (
       <Card style={{ padding: 20 }}>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.green, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: colors.green,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
           Approved
         </div>
-        <div style={{ fontSize: 14, marginTop: 6 }}>{dueLabel} was approved. Nothing due right now.</div>
+        <div style={{ fontSize: 14, marginTop: 6 }}>
+          {dueLabel} was approved. Nothing due right now.
+        </div>
       </Card>
     );
   }
 
   return (
     <Card style={{ padding: 20, borderColor: colors.border }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: colors.muted, textTransform: "uppercase", letterSpacing: "0.04em" }}>Due</div>
-      <div style={{ fontSize: 14, marginTop: 6, marginBottom: 10 }}>{dueLabel} is outstanding.</div>
+      <div
+        style={{
+          fontSize: 11.5,
+          fontWeight: 700,
+          color: colors.muted,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+        }}
+      >
+        Due
+      </div>
+      <div style={{ fontSize: 14, marginTop: 6, marginBottom: 10 }}>
+        {dueLabel} is outstanding.
+      </div>
       <LinkButton href="/cell/report" variant="primary">
         Start report
       </LinkButton>

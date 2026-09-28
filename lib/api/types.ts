@@ -31,8 +31,14 @@ export interface TokenRefreshResponse {
 
 /**
  * The user profile the API returns on login (as `data`, minus `tokens`).
- * `role` is a UUID into `/api/v1/roles/`; `role_name` is enriched in by our
- * login route. Extra keys pass through.
+ * `role` is the role name directly (e.g. `"SECTION_LEADER"`) — despite the
+ * OpenAPI schema documenting it as a UUID into `/api/v1/roles/`, the live API
+ * sends the name itself, and `lib/auth/roles.ts` matches against it exactly.
+ * Also carries the caller's own org unit nested under a role-specific key
+ * (`section: {id, name}` for a Section Leader, presumably `region` /
+ * `district` / `zone` / `area` / `cell` for the others) — not yet typed here
+ * since only the Section Leader shape has been confirmed live.
+ * Extra keys pass through.
  */
 export interface ApiUser {
   id?: string | number;
@@ -41,9 +47,9 @@ export interface ApiUser {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
-  /** Role primary key (UUID). Resolve against `/api/v1/roles/` for a label. */
+  /** The role name, exact (e.g. `"SECTION_LEADER"`) — see the interface doc above. */
   role?: string;
-  /** Enriched by `app/api/auth/login` from the roles list — not sent by the API. */
+  /** @deprecated Never populated — kept only so old cached `dcc_user` cookies still typecheck. */
   role_name?: string;
   is_superuser?: boolean;
   is_staff?: boolean;
@@ -146,14 +152,67 @@ export interface SundayReportFigures {
   comment: string;
 }
 
+/** A leader / user as embedded in a report's `cell` tree. */
+export interface ReportUser {
+  id: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone_number?: string | null;
+  status?: string;
+  last_login?: string | null;
+  code?: string | null;
+  email_verified?: boolean;
+  [key: string]: unknown;
+}
+
+/** Fields shared by every level of the hierarchy embedded in a report. */
+export interface ReportOrgUnit {
+  id: string;
+  name?: string;
+  code?: string;
+  status?: string;
+  deleted_at?: string | null;
+  leader?: ReportUser | null;
+  [key: string]: unknown;
+}
+
+export type ReportRegion = ReportOrgUnit;
+export interface ReportDistrict extends ReportOrgUnit {
+  region?: ReportRegion | null;
+}
+export interface ReportZone extends ReportOrgUnit {
+  district?: ReportDistrict | null;
+}
+export interface ReportArea extends ReportOrgUnit {
+  zone?: ReportZone | null;
+}
+export interface ReportSection extends ReportOrgUnit {
+  area?: ReportArea | null;
+}
+
+/** The cell a report belongs to, with its full parent chain (Section → Area → Zone → District → Region). */
+export interface ReportCell extends ReportOrgUnit {
+  section?: ReportSection | null;
+  cell_id?: string | null;
+  cell_type?: string;
+  address?: string | null;
+  longitude?: number | null;
+  latitude?: number | null;
+}
+
 /**
  * A Sunday report row. Fields are ordered as the live API returns them; the
  * schema also lists `status` / `deleted_at` / `meta`, which the endpoints do
  * not actually send back, so they are optional here.
+ *
+ * `cell` is a UUID string on some endpoints (create / approvals queue) and the
+ * full nested {@link ReportCell} on `reports/mine/`, so it's a union.
  */
 export interface SundayReport extends Partial<SundayReportFigures> {
   id: string;
-  cell: string | null;
+  cell: string | ReportCell | null;
   service_date: string | null; // YYYY-MM-DD, a Sunday
   approval_status: ApprovalStatus;
   approved_by: string | null;
@@ -228,12 +287,28 @@ export interface ComplianceScope extends ComplianceSummary {
   scope: Record<string, unknown>;
 }
 
-/** `GET /api/v1/organization/dashboard/non-submitters/` — published as bare `object`; refine against real data. */
+/**
+ * `GET /api/v1/organization/dashboard/non-submitters/`. The backend's own API
+ * reference documents each row as just `{id, name, code}` — thinner than the
+ * `cell_name`/`section`/`consecutive_misses`/`chronic` shape this was first
+ * built against (from the OpenAPI schema's bare-`object` placeholder, which
+ * has been wrong before). Both sets of keys are kept: `id`/`name`/`code` are
+ * the documented ones and should be read first; the others stay as a
+ * fallback in case the live payload carries more than the doc's example.
+ */
 export interface NonSubmitterRow {
+  id?: string;
+  name?: string;
+  code?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   cell?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   cell_name?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   section?: string;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   consecutive_misses?: number;
+  /** @deprecated Not in the documented response — kept as a fallback only. */
   chronic?: boolean;
   [key: string]: unknown;
 }

@@ -106,7 +106,7 @@ async function handle(req: NextRequest, ctx: ProxyContext): Promise<NextResponse
   // Proactive refresh when the access token is missing or already expired.
   if ((!access || isJwtExpired(access)) && refresh) {
     try {
-      const next = await refreshTokens(refresh);
+      const next = await refreshTokens(refresh, access);
       access = next.access;
       rotated = { access: next.access, refresh: next.refresh };
     } catch (err) {
@@ -142,7 +142,7 @@ async function handle(req: NextRequest, ctx: ProxyContext): Promise<NextResponse
   // Reactive refresh: the upstream rejected the token we sent.
   if (upstream.status === 401 && refresh && !rotated) {
     try {
-      const next = await refreshTokens(refresh);
+      const next = await refreshTokens(refresh, access);
       rotated = { access: next.access, refresh: next.refresh };
       upstream = await doFetch(next.access);
     } catch {

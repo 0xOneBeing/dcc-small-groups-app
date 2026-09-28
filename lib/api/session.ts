@@ -33,7 +33,7 @@ export async function getServerSession(): Promise<ServerSession> {
 
   if (refresh) {
     try {
-      const next = await refreshTokens(refresh);
+      const next = await refreshTokens(refresh, access);
       return { authenticated: true, user, claims: decodeJwt<AccessTokenClaims>(next.access) };
     } catch {
       return { authenticated: false, user: null, claims: null };
@@ -45,15 +45,14 @@ export async function getServerSession(): Promise<ServerSession> {
 
 /**
  * Resolve a session to exactly one of the API's nine roles. Trusts
- * `is_superuser`, then an exact (case-sensitive) match of `role_name` — which
- * the login route enriches from `/api/v1/roles/` — then any role hint in the
- * JWT claims. Cell Leaders get a 403 on the roles list, so they fall through
- * to `CELL_LEADER` by default.
+ * `is_superuser`, then an exact (case-sensitive) match of `user.role` — the
+ * API sends this as the role name directly (e.g. `"SECTION_LEADER"`) — then
+ * any role hint in the JWT claims. Falls through to `CELL_LEADER` by default.
  */
 export function roleFor(session: Pick<ServerSession, "user" | "claims">): RoleName {
   return resolveRole({
     isSuperuser: session.user?.is_superuser ?? null,
-    roleName: session.user?.role_name,
+    roleName: session.user?.role,
     claims: session.claims as Record<string, unknown> | null,
   });
 }

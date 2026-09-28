@@ -38,7 +38,7 @@ export interface ShellContext {
   capabilities: RoleCapabilities;
   /** Route group the user belongs in. */
   area: AppArea;
-  /** Display label — the API's `role_name` if present, else the capability label. */
+  /** Display label for the sidebar/header. */
   roleLabel: string;
 }
 
@@ -48,6 +48,9 @@ export interface ShellContext {
  * `expectedArea` is advisory for now: the `/coordinator`, `/msu`, and `/admin`
  * route groups don't exist yet, so bouncing a mismatched user to their real
  * home would land on a 404. Pass `{ enforce: true }` once those exist.
+ *
+ * `SUPER_ADMIN` is exempt from enforcement regardless: they can view every
+ * area at any time, so an area mismatch is never a reason to redirect them.
  */
 export async function requireShellContext(
   expectedArea?: AppArea,
@@ -57,7 +60,7 @@ export async function requireShellContext(
   const role = roleFor(session);
   const capabilities = capabilitiesForSession(session);
 
-  if (opts.enforce && expectedArea && capabilities.area !== expectedArea) {
+  if (opts.enforce && expectedArea && role !== "SUPER_ADMIN" && capabilities.area !== expectedArea) {
     redirect(capabilities.home);
   }
 
@@ -67,8 +70,6 @@ export async function requireShellContext(
     role,
     capabilities,
     area: capabilities.area,
-    roleLabel:
-      (typeof session.user?.role_name === "string" && session.user.role_name) ||
-      capabilities.label,
+    roleLabel: capabilities.label,
   };
 }

@@ -154,23 +154,28 @@ export function homePathForRole(role: RoleName): string {
 export interface RoleResolutionInput {
   /** The API's `is_superuser` flag on the user profile. */
   isSuperuser?: boolean | null;
-  /** `user.role_name` — enriched by the login route from `/api/v1/roles/`. */
+  /**
+   * `user.role` from the login/session profile — the API sends this as the
+   * exact role name already (e.g. `"SECTION_LEADER"`), not a UUID needing a
+   * lookup against `/api/v1/roles/`. (An earlier version of this resolver
+   * assumed the UUID shape the OpenAPI schema documents; the live API does
+   * not behave that way, so nothing looks it up any more.)
+   */
   roleName?: unknown;
   /** Decoded access-token claims, if any role hint rides along there. */
   claims?: Record<string, unknown> | null;
 }
 
 /** Claim keys that have been seen to carry a role string, in priority order. */
-const CLAIM_KEYS = ["role_name", "role", "user_role", "roles", "groups", "scope"] as const;
+const CLAIM_KEYS = ["role", "role_name", "user_role", "roles", "groups", "scope"] as const;
 
 /**
  * Resolve a session to exactly one {@link RoleName}.
  *
  * 1. `is_superuser` → SUPER_ADMIN.
- * 2. An exact, case-sensitive match of `role_name` against the nine.
+ * 2. An exact, case-sensitive match of `user.role` against the nine.
  * 3. An exact match of any known JWT claim (string or array of strings).
- * 4. Otherwise CELL_LEADER — the overwhelming majority, and the API returns
- *    403 on `/api/v1/roles/` for them so `role_name` is never populated.
+ * 4. Otherwise CELL_LEADER — the overwhelming majority.
  */
 export function resolveRole(input: RoleResolutionInput): RoleName {
   if (input.isSuperuser === true) return "SUPER_ADMIN";
